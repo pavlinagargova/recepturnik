@@ -275,6 +275,14 @@ h1 {
 
 .btn-danger:hover { background: #fbf3ef; }
 
+#confirm-ok.btn-danger {
+  background: #9f1239;
+  color: white;
+  box-shadow: none;
+}
+
+#confirm-ok.btn-danger:hover { background: #881337; }
+
 .menu { position: relative; }
 .menu > summary { list-style: none; }
 .menu > summary::-webkit-details-marker { display: none; }

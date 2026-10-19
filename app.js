@@ -1711,18 +1711,35 @@ function renderSidebar() {
     toast(value);
   }
 
-  async function cancelInvite(code) {
-    await firebase.firestore().collection("invites").doc(code).delete();
-    const fresh = document.querySelector("#invite-fresh");
-    if (fresh.textContent.indexOf(code) !== -1) fresh.hidden = true;
-    await refreshInvites();
-    toast("Поканата е отменена");
+  function cancelInvite(code) {
+    ask({
+      title: "Изтриване на код",
+      text: "Да се изтрие ли кодът «" + code + "»? След това с него не може да се направи акаунт.",
+      confirmLabel: "Изтрий",
+      danger: true,
+    }).then(async function (ok) {
+      if (!ok) return;
+      await firebase.firestore().collection("invites").doc(code).delete();
+      const fresh = document.querySelector("#invite-fresh");
+      if (fresh.textContent.indexOf(code) !== -1) fresh.hidden = true;
+      await refreshInvites();
+      toast("Поканата е отменена");
+    });
   }
 
-  async function revokeMember(item) {
-    if (item.usedBy) await firebase.firestore().collection("members").doc(item.usedBy).delete();
-    await refreshInvites();
-    toast("Достъпът е спрян");
+  function revokeMember(item) {
+    const who = item.usedEmail || "този човек";
+    ask({
+      title: "Спиране на достъп",
+      text: "Да се спре ли достъпът на " + who + "? Рецептите му остават, но няма да може да влезе.",
+      confirmLabel: "Спри достъпа",
+      danger: true,
+    }).then(async function (ok) {
+      if (!ok) return;
+      if (item.usedBy) await firebase.firestore().collection("members").doc(item.usedBy).delete();
+      await refreshInvites();
+      toast("Достъпът е спрян");
+    });
   }
 
   document.querySelector("#auth-switch").addEventListener("click", function () {
