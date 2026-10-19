@@ -88,20 +88,19 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .brand { display: flex; gap: 10px; align-items: center; min-width: 0; }
 .brand-text { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
 .logo {
   width: 36px;
   height: 36px;
-  display: grid;
-  place-items: center;
-  background: var(--ink);
-  color: white;
-  font-family: var(--sans);
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1;
-  border-radius: 12px;
+  display: block;
   flex: none;
+  line-height: 0;
+  background: none;
+  border-radius: 12px;
 }
+
+.logo svg { width: 100%; height: 100%; display: block; }
 
 .brand-home {
   display: inline-flex;
@@ -191,7 +190,7 @@ h1 {
   color: white;
 }
 
-.gate-hero .logo { background: white; color: var(--ink); }
+.gate-hero .logo { width: 72px; height: 72px; background: none; }
 .gate-hero h2 {
   max-width: 12ch;
   margin: 12px 0 0;
@@ -719,6 +718,8 @@ dialog {
   border-radius: 24px;
   padding: 24px;
   width: min(440px, calc(100% - 32px));
+  max-height: min(640px, calc(100vh - 32px));
+  overflow: auto;
   background: white;
   color: var(--ink);
   box-shadow: var(--shadow);
@@ -734,24 +735,39 @@ dialog p { margin: 0 0 18px; color: var(--muted); }
   padding: 0;
   display: grid;
   gap: 8px;
-  max-height: 240px;
+  max-height: 320px;
   overflow: auto;
 }
 
 .invite-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  gap: 10px;
   min-width: 0;
+  padding: 12px;
+  border-radius: 16px;
+  background: #fafaf9;
 }
+
+.invite-main { min-width: 0; }
 
 .invite-row code {
+  display: block;
   font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-  letter-spacing: 0.03em;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
-.invite-row .quiet { flex: 1; min-width: 0; font-size: 13px; }
-.invite-row .btn { min-height: 36px; padding: 0 10px; }
+.invite-row .quiet {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.invite-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.invite-row .btn { min-height: 36px; padding: 0 12px; }
+.dialog-actions { margin-top: 16px; }
 
 fieldset.colors { border: 0; margin: 16px 0; padding: 0; }
 fieldset.colors legend { padding: 0; }

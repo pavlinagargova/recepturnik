@@ -5,14 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light">
   <title>Рецепуфник</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='10' fill='%231c1917'/%3E%3Ctext x='16' y='21' text-anchor='middle' font-size='15' font-family='system-ui,sans-serif' font-weight='700' fill='white'%3EР%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='10' fill='%231c1917'/%3E%3Cellipse cx='16' cy='22' rx='9' ry='6.2' fill='%23e7b56a'/%3E%3Ccircle cx='11.6' cy='15.2' r='4.4' fill='%23fff7ec'/%3E%3Ccircle cx='18.4' cy='14.4' r='5' fill='%23fff7ec'/%3E%3Ccircle cx='15.2' cy='11.6' r='3.5' fill='%23fffdf8'/%3E%3Ccircle cx='22.4' cy='9.4' r='2.5' fill='%23e11d48'/%3E%3Cpath d='M22.6 7.4c1.1-2.2 3.2-2.5 4.2-1' fill='none' stroke='%234d7c0f' stroke-width='1.1' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body>
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <symbol id="mark" viewBox="0 0 32 32">
+      <rect width="32" height="32" rx="10" fill="#1c1917"/>
+      <ellipse cx="16" cy="22" rx="9" ry="6.2" fill="#e7b56a"/>
+      <ellipse cx="16" cy="23.4" rx="6.4" ry="3" fill="#c4893a" opacity="0.35"/>
+      <circle cx="11.6" cy="15.2" r="4.4" fill="#fff7ec"/>
+      <circle cx="18.4" cy="14.4" r="5" fill="#fff7ec"/>
+      <circle cx="15.2" cy="11.6" r="3.5" fill="#fffdf8"/>
+      <circle cx="22.4" cy="9.4" r="2.5" fill="#e11d48"/>
+      <path d="M22.6 7.4c1.1-2.2 3.2-2.5 4.2-1" fill="none" stroke="#4d7c0f" stroke-width="1.1" stroke-linecap="round"/>
+      <circle cx="21.6" cy="8.6" r="0.7" fill="#fff"/>
+    </symbol>
+  </svg>
   <a class="skip" href="#main">Към съдържанието</a>
   <div id="gate" class="gate">
     <div class="gate-hero">
-      <span class="logo" aria-hidden="true">Р</span>
+      <span class="logo" aria-hidden="true"><svg><use href="#mark"/></svg></span>
       <h2>Рецептите, които искаш да сготвиш пак.</h2>
       <p>Запазваш ги в акаунта си. Същите са на телефона и на компютъра.</p>
     </div>
@@ -45,7 +58,7 @@
       <div class="brand">
         <h1>
           <button type="button" class="brand-home" id="logo-home">
-            <span class="logo" aria-hidden="true">Р</span>
+            <span class="logo" aria-hidden="true"><svg><use href="#mark"/></svg></span>
             Рецепуфник
           </button>
         </h1>
@@ -130,6 +143,6 @@
   <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore-compat.js"></script>
   <script src="config.js"></script>
   <script src="parse.js"></script>
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

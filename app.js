@@ -1656,24 +1656,28 @@ function renderSidebar() {
     list.replaceChildren.apply(list, items.map(function (item) {
       const status = item.used ? "Използвана от " + (item.usedEmail || "някого") : "Свободна";
       return el("li", { class: "invite-row" }, [
-        el("code", { text: item.id }),
-        el("span", { class: "quiet", text: status }),
-        el("button", {
-          type: "button",
-          class: "btn btn-ghost",
-          onclick: function () { copyText(item.id); },
-        }, "Копирай"),
-        item.used
-          ? el("button", {
+        el("div", { class: "invite-main" }, [
+          el("code", { text: item.id }),
+          el("span", { class: "quiet", text: status }),
+        ]),
+        el("div", { class: "invite-actions" }, [
+          el("button", {
             type: "button",
-            class: "btn btn-danger",
-            onclick: function () { revokeMember(item); },
-          }, "Спри достъпа")
-          : el("button", {
-            type: "button",
-            class: "btn btn-danger",
-            onclick: function () { cancelInvite(item.id); },
-          }, "Отмени"),
+            class: "btn btn-ghost",
+            onclick: function () { copyText(item.id); },
+          }, "Копирай"),
+          item.used
+            ? el("button", {
+              type: "button",
+              class: "btn btn-danger",
+              onclick: function () { revokeMember(item); },
+            }, "Спри достъпа")
+            : el("button", {
+              type: "button",
+              class: "btn btn-danger",
+              onclick: function () { cancelInvite(item.id); },
+            }, "Отмени"),
+        ]),
       ]);
     }));
   }
