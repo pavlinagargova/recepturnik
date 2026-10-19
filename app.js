@@ -395,11 +395,11 @@
   function syncTitle() {
     if (state.route.name === "detail") {
       const recipe = findRecipe(state.route.id);
-      document.title = recipe ? recipe.title + " - Рецептурник" : "Рецептурник";
+      document.title = recipe ? recipe.title + " - Рецепуфник" : "Рецепуфник";
     } else if (state.route.name === "edit") {
-      document.title = (state.route.id ? "Промяна" : "Нова рецепта") + " - Рецептурник";
+      document.title = (state.route.id ? "Промяна" : "Нова рецепта") + " - Рецепуфник";
     } else {
-      document.title = "Рецептурник";
+      document.title = "Рецепуфник";
     }
   }
 
@@ -409,7 +409,12 @@
     window.scrollTo(0, 0);
   }
 
-  function go(route) {
+  function go(route, before) {
+    function finish() {
+      if (before) before();
+      isDirty = function () { return false; };
+      applyRoute(route);
+    }
     if (state.route.name === "edit" && isDirty()) {
       ask({
         title: "Незапазени промени",
@@ -417,13 +422,11 @@
         confirmLabel: "Продължи",
       }).then(function (ok) {
         if (!ok) return;
-        isDirty = function () { return false; };
-        applyRoute(route);
+        finish();
       });
       return;
     }
-    isDirty = function () { return false; };
-    applyRoute(route);
+    finish();
   }
 
   function setCategory(id) {
@@ -577,7 +580,7 @@ function renderSidebar() {
       const category = categoryOf(effectiveCategory(recipe));
       const card = el("article", { class: "card" });
       card.dataset.id = recipe.id;
-      card.style.borderTopColor = category ? category.color : "#d7cbb8";
+      card.style.setProperty("--cat", category ? category.color : "#d6d3d1");
       if (recipe.hasPhoto) card.append(el("div", { class: "card-photo", "data-photo": recipe.id }));
       const open = el("button", {
         type: "button",
@@ -1415,7 +1418,7 @@ function renderSidebar() {
     }
     const incoming = importPayload(parsed);
     if (!incoming) {
-      toast("Този файл не прилича на рецептурник");
+      toast("Този файл не прилича на рецепуфник");
       return;
     }
     const book = incoming.book;
@@ -1454,6 +1457,13 @@ function renderSidebar() {
     else toast("Добавени са " + added + " " + recipeWord(added));
   }
 
+  document.querySelector("#logo-home").addEventListener("click", function () {
+    go({ name: "list" }, function () {
+      state.categoryId = "all";
+      state.query = "";
+      document.querySelector("#search").value = "";
+    });
+  });
   document.querySelector("#new-recipe").addEventListener("click", function () { go({ name: "edit" }); });
   document.querySelector("#search-form").addEventListener("submit", function (event) { event.preventDefault(); });
   document.querySelector("#search").addEventListener("input", function (event) {
@@ -1576,7 +1586,7 @@ function renderSidebar() {
     }
     form.hidden = true;
     wait.hidden = false;
-    document.querySelector("#gate-title").textContent = "Рецептурник";
+    document.querySelector("#gate-title").textContent = "Рецепуфник";
     wait.textContent = stateName === "book" ? "Зареждам книгата..." : "Проверявам входа...";
   }
 

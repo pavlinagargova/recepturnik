@@ -4,19 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light">
-  <title>Рецептурник</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%238a3b1e'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='16' font-family='Georgia,serif' fill='white'%3EР%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css">
+  <title>Рецепуфник</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='10' fill='%231c1917'/%3E%3Ctext x='16' y='21' text-anchor='middle' font-size='15' font-family='system-ui,sans-serif' font-weight='700' fill='white'%3EР%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
   <a class="skip" href="#main">Към съдържанието</a>
   <div id="gate" class="gate">
-    <div class="gate-card">
+    <div class="gate-hero">
       <span class="logo" aria-hidden="true">Р</span>
-      <div>
-        <p class="eyebrow">Лична книга</p>
-        <h2 id="gate-title">Рецептурник</h2>
-      </div>
+      <h2>Рецептите, които искаш да сготвиш пак.</h2>
+      <p>Запазваш ги в акаунта си. Същите са на телефона и на компютъра.</p>
+    </div>
+    <div class="gate-card">
+      <p class="eyebrow">Рецепуфник</p>
+      <h2 id="gate-title">Рецепуфник</h2>
       <p id="gate-wait" class="quiet">Проверявам входа...</p>
       <form id="auth-form" hidden>
         <p class="quiet" id="auth-lead">Рецептите стоят в акаунта ти, така че ги имаш и на телефона, и на компютъра.</p>
@@ -39,20 +41,21 @@
     </div>
   </div>
   <div class="app" id="app" hidden>
-    <header>
+    <header class="topbar">
       <div class="brand">
-        <span class="logo" aria-hidden="true">Р</span>
-        <div>
-          <p class="eyebrow">Лична книга</p>
-          <h1>Рецептурник</h1>
-          <p class="count-label" id="count-label">Празно засега</p>
-        </div>
+        <h1>
+          <button type="button" class="brand-home" id="logo-home">
+            <span class="logo" aria-hidden="true">Р</span>
+            Рецепуфник
+          </button>
+        </h1>
+        <p class="count-label" id="count-label">Празно засега</p>
       </div>
+      <form class="search" id="search-form" role="search">
+        <label class="sr-only" for="search">Търсене</label>
+        <input id="search" type="search" placeholder="Търси по име или съставка" autocomplete="off">
+      </form>
       <div class="tools">
-        <form class="search" id="search-form" role="search">
-          <label class="sr-only" for="search">Търсене</label>
-          <input id="search" type="search" placeholder="Търси по име или съставка" autocomplete="off">
-        </form>
         <div class="account">
           <span id="account-label"></span>
           <button type="button" class="btn btn-ghost" id="invite-open" hidden>Покани</button>
@@ -66,12 +69,14 @@
             <p>Книгата се пази в акаунта ти. Свали копие, ако искаш и файл на компютъра.</p>
           </div>
         </details>
-        <button type="button" class="btn btn-primary" id="new-recipe">Нова рецепта</button>
       </div>
+      <button type="button" class="btn btn-primary" id="new-recipe">Нова рецепта</button>
     </header>
-    <div class="shell">
-      <nav id="sidebar" aria-label="Категории"></nav>
-      <main id="main" tabindex="-1"></main>
+    <div class="frame">
+      <div class="shell">
+        <nav id="sidebar" aria-label="Категории"></nav>
+        <main id="main" tabindex="-1"></main>
+      </div>
     </div>
   </div>
 
@@ -125,6 +130,6 @@
   <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore-compat.js"></script>
   <script src="config.js"></script>
   <script src="parse.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>
