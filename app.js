@@ -121,12 +121,32 @@
     }
   }
 
+  let backupTimer = 0;
+
   function persist() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
     } catch (error) {
       toast("Не успях да запазя. Паметта на браузъра може да е пълна.");
+      return;
     }
+    window.clearTimeout(backupTimer);
+    backupTimer = window.setTimeout(function () {
+      downloadBackup("recepturnik-backup.json");
+      toast("Имаш копие във файловете: recepturnik-backup.json");
+    }, 600);
+  }
+
+  function downloadBackup(filename) {
+    const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
 
   function recipeWord(count) {
@@ -332,7 +352,7 @@ function renderSidebar() {
         id: "add-category",
         onclick: function () { openCategoryDialog(null); },
       }, "Нова категория"),
-      el("p", { class: "side-hint" }, "Рецептите се пазят в този браузър.")
+      el("p", { class: "side-hint" }, "Затварянето на страницата не ги трие. При промяна се сваля и файл.")
     );
   }
 
@@ -383,7 +403,7 @@ function renderSidebar() {
         el("div", { class: "plate", "aria-hidden": "true" }),
         el("h2", {}, "Все още няма рецепти"),
         el("p", { class: "lead" }, "Когато намериш нещо вкусно, запази го тук. Сложи категория, връзка към страницата и текста на рецептата."),
-        el("p", { class: "quiet" }, "Всичко остава в този браузър. От Данни можеш да свалиш копие."),
+        el("p", { class: "quiet" }, "Остават при затваряне на страницата. При всяко запазване се сваля и файл recepturnik-backup.json."),
         el("div", { class: "actions" }, [
           el("button", { type: "button", class: "btn btn-primary", onclick: function () { go({ name: "edit" }); } }, "Нова рецепта"),
         ]),
@@ -1029,15 +1049,8 @@ function renderSidebar() {
 
   function exportData() {
     closeMenu();
-    const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "recepturnik-" + new Date().toISOString().slice(0, 10) + ".json";
-    document.body.append(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    window.clearTimeout(backupTimer);
+    downloadBackup("recepturnik-backup.json");
     toast("Копието е свалено");
   }
 
@@ -1147,6 +1160,10 @@ function renderSidebar() {
     event.preventDefault();
     event.returnValue = "";
   });
+
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persist().catch(function () {});
+  }
 
   render();
 })();
