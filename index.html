@@ -28,6 +28,10 @@
           <span>Парола</span>
           <input id="auth-password" type="password" autocomplete="current-password" minlength="6" required>
         </label>
+        <label class="field" id="invite-field" hidden>
+          <span>Код от покана</span>
+          <input id="auth-invite" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="12" inputmode="text">
+        </label>
         <p id="auth-error" class="auth-error" hidden></p>
         <button type="submit" class="btn btn-primary" id="auth-submit">Влез</button>
         <button type="button" class="btn btn-ghost" id="auth-switch">Нямам акаунт</button>
@@ -51,6 +55,7 @@
         </form>
         <div class="account">
           <span id="account-label"></span>
+          <button type="button" class="btn btn-ghost" id="invite-open" hidden>Покани</button>
           <button type="button" class="btn btn-ghost" id="sign-out">Изход</button>
         </div>
         <details class="menu" id="data-menu">
@@ -88,6 +93,18 @@
         <button type="submit" class="btn btn-primary">Запази</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="invite-dialog" aria-labelledby="invite-title">
+    <h2 id="invite-title">Покани</h2>
+    <p>Прати кода на човека. С него си прави акаунт веднъж, после влиза с имейла и паролата си.</p>
+    <button type="button" class="btn btn-primary" id="invite-create">Нова покана</button>
+    <p id="invite-fresh" hidden></p>
+    <ul id="invite-list" class="invite-list"></ul>
+    <div class="dialog-actions">
+      <span class="grow"></span>
+      <button type="button" class="btn btn-ghost" id="invite-close">Затвори</button>
+    </div>
   </dialog>
 
   <dialog id="confirm-dialog" aria-labelledby="confirm-title">

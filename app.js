@@ -1211,18 +1211,41 @@ function renderSidebar() {
   const authModes = {
     login: {
       title: "Вход",
+      lead: "Рецептите стоят в акаунта ти, така че ги имаш и на телефона, и на компютъра.",
       submit: "Влез",
       switchLabel: "Нямам акаунт",
       password: "current-password",
     },
     register: {
       title: "Нов акаунт",
+      lead: "Нужен е код от покана. След това влизаш със същия имейл и от телефона, и от компютъра.",
       submit: "Създай акаунт",
       switchLabel: "Имам акаунт",
       password: "new-password",
     },
   };
   let authMode = "login";
+  let claimingInvite = false;
+  let shownUid = "";
+  let pendingAuthError = "";
+
+  function isOwnerEmail(email) {
+    return String(email || "").toLowerCase() === String(window.RECEPTURNIK_OWNER || "").toLowerCase();
+  }
+
+  function cleanInviteCode(value) {
+    const code = String(value || "").trim().toLowerCase().replace(/\s+/g, "");
+    return /^[a-z0-9]{12}$/.test(code) ? code : "";
+  }
+
+  function inviteCode() {
+    const alphabet = "abcdefghijkmnopqrstuvwxyz23456789";
+    const bytes = new Uint8Array(12);
+    crypto.getRandomValues(bytes);
+    let out = "";
+    for (let i = 0; i < bytes.length; i += 1) out += alphabet[bytes[i] % alphabet.length];
+    return out;
+  }
 
   function authErrorText(code) {
     if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found" || code === "auth/invalid-login-credentials") {
@@ -1233,6 +1256,8 @@ function renderSidebar() {
     if (code === "auth/invalid-email") return "Този имейл не изглежда верен.";
     if (code === "auth/too-many-requests") return "Твърде много опити. Изчакай малко и пробвай пак.";
     if (code === "auth/network-request-failed") return "Няма връзка. Провери интернета.";
+    if (code === "invite-used") return "Тази покана вече е използвана.";
+    if (code === "permission-denied") return "Тази покана не важи.";
     return "Не успях. Опитай отново.";
   }
 
@@ -1246,9 +1271,11 @@ function renderSidebar() {
     authMode = mode;
     const copy = authModes[mode];
     document.querySelector("#gate-title").textContent = copy.title;
+    document.querySelector("#auth-lead").textContent = copy.lead;
     document.querySelector("#auth-submit").textContent = copy.submit;
     document.querySelector("#auth-switch").textContent = copy.switchLabel;
     document.querySelector("#auth-password").setAttribute("autocomplete", copy.password);
+    document.querySelector("#invite-field").hidden = mode !== "register";
     showAuthError("");
   }
 
@@ -1263,6 +1290,10 @@ function renderSidebar() {
       wait.hidden = true;
       form.hidden = false;
       setAuthMode(authMode);
+      if (pendingAuthError) {
+        showAuthError(pendingAuthError);
+        pendingAuthError = "";
+      }
       return;
     }
     form.hidden = true;
@@ -1275,7 +1306,131 @@ function renderSidebar() {
     document.querySelector("#gate").hidden = true;
     document.querySelector("#app").hidden = false;
     document.querySelector("#account-label").textContent = email || "";
+    document.querySelector("#invite-open").hidden = !isOwnerEmail(email);
     render();
+  }
+
+  async function ensureMember(user) {
+    if (isOwnerEmail(user.email)) return true;
+    const memberRef = firebase.firestore().collection("members").doc(user.uid);
+    if ((await memberRef.get()).exists) return true;
+    const found = await firebase.firestore().collection("invites").where("usedBy", "==", user.uid).limit(1).get();
+    if (found.empty) return false;
+    await memberRef.set({
+      email: user.email,
+      code: found.docs[0].id,
+      createdAt: new Date().toISOString(),
+    });
+    return true;
+  }
+
+  async function claimInvite(user, code) {
+    const inviteRef = firebase.firestore().collection("invites").doc(code);
+    await firebase.firestore().runTransaction(function (tx) {
+      return tx.get(inviteRef).then(function (fresh) {
+        if (!fresh.exists || fresh.data().used) {
+          const error = new Error("used");
+          error.code = "invite-used";
+          throw error;
+        }
+        tx.update(inviteRef, {
+          used: true,
+          usedBy: user.uid,
+          usedEmail: user.email,
+        });
+      });
+    });
+    await firebase.firestore().collection("members").doc(user.uid).set({
+      email: user.email,
+      code: code,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  async function enterApp(user) {
+    if (shownUid === user.uid && !document.querySelector("#app").hidden) return;
+    shownUid = user.uid;
+    showGate("book");
+    try {
+      await adoptRemote(user);
+    } catch (error) {
+      toast("Не успях да отворя базата. Показвам копието от този браузър.");
+    }
+    showBook(user.email);
+  }
+
+  function renderInvites(items) {
+    const list = document.querySelector("#invite-list");
+    if (!items.length) {
+      list.replaceChildren(el("li", { class: "quiet" }, "Още няма покани."));
+      return;
+    }
+    list.replaceChildren.apply(list, items.map(function (item) {
+      const status = item.used ? "Използвана от " + (item.usedEmail || "някого") : "Свободна";
+      return el("li", { class: "invite-row" }, [
+        el("code", { text: item.id }),
+        el("span", { class: "quiet", text: status }),
+        el("button", {
+          type: "button",
+          class: "btn btn-ghost",
+          onclick: function () { copyText(item.id); },
+        }, "Копирай"),
+        item.used
+          ? el("button", {
+            type: "button",
+            class: "btn btn-danger",
+            onclick: function () { revokeMember(item); },
+          }, "Спри достъпа")
+          : el("button", {
+            type: "button",
+            class: "btn btn-danger",
+            onclick: function () { cancelInvite(item.id); },
+          }, "Отмени"),
+      ]);
+    }));
+  }
+
+  async function refreshInvites() {
+    const snap = await firebase.firestore().collection("invites").get();
+    const items = [];
+    snap.forEach(function (doc) {
+      const data = doc.data() || {};
+      items.push({
+        id: doc.id,
+        used: Boolean(data.used),
+        usedBy: data.usedBy || "",
+        usedEmail: data.usedEmail || "",
+        createdAt: data.createdAt || "",
+      });
+    });
+    items.sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); });
+    renderInvites(items);
+  }
+
+  function copyText(value) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(value).then(function () {
+        toast("Кодът е копиран");
+      }).catch(function () {
+        toast(value);
+      });
+      return;
+    }
+    toast(value);
+  }
+
+  async function cancelInvite(code) {
+    await firebase.firestore().collection("invites").doc(code).delete();
+    const fresh = document.querySelector("#invite-fresh");
+    if (fresh.textContent.indexOf(code) !== -1) fresh.hidden = true;
+    await refreshInvites();
+    toast("Поканата е отменена");
+  }
+
+  async function revokeMember(item) {
+    if (item.usedBy) await firebase.firestore().collection("members").doc(item.usedBy).delete();
+    await refreshInvites();
+    toast("Достъпът е спрян");
   }
 
   document.querySelector("#auth-switch").addEventListener("click", function () {
@@ -1285,16 +1440,47 @@ function renderSidebar() {
 
   document.querySelector("#auth-form").addEventListener("submit", async function (event) {
     event.preventDefault();
-    const email = document.querySelector("#auth-email").value.trim();
+    const email = document.querySelector("#auth-email").value.trim().toLowerCase();
     const password = document.querySelector("#auth-password").value;
     const submit = document.querySelector("#auth-submit");
     showAuthError("");
     submit.disabled = true;
     try {
       const auth = firebase.auth();
-      if (authMode === "register") await auth.createUserWithEmailAndPassword(email, password);
-      else await auth.signInWithEmailAndPassword(email, password);
+      if (authMode === "register") {
+        const ownerSignup = isOwnerEmail(email);
+        const code = cleanInviteCode(document.querySelector("#auth-invite").value);
+        if (!ownerSignup) {
+          if (!code) {
+            showAuthError("Напиши кода от поканата.");
+            submit.disabled = false;
+            return;
+          }
+          const snap = await firebase.firestore().collection("invites").doc(code).get();
+          if (!snap.exists || snap.data().used) {
+            showAuthError("Тази покана не важи.");
+            submit.disabled = false;
+            return;
+          }
+        }
+        claimingInvite = !ownerSignup;
+        const cred = await auth.createUserWithEmailAndPassword(email, password);
+        if (!ownerSignup) {
+          try {
+            await claimInvite(cred.user, code);
+          } catch (error) {
+            try { await cred.user.delete(); } catch (deleteError) { /* акаунтът вече е махнат */ }
+            throw error;
+          } finally {
+            claimingInvite = false;
+          }
+          await enterApp(cred.user);
+        }
+      } else {
+        await auth.signInWithEmailAndPassword(email, password);
+      }
     } catch (error) {
+      claimingInvite = false;
       showAuthError(authErrorText(error && error.code));
       submit.disabled = false;
     }
@@ -1321,24 +1507,67 @@ function renderSidebar() {
     document.querySelector("#auth-switch").disabled = true;
   } else {
     firebase.initializeApp(window.RECEPTURNIK_FIREBASE);
-    let shownUid = "";
+
+    document.querySelector("#invite-open").addEventListener("click", async function () {
+      document.querySelector("#invite-fresh").hidden = true;
+      document.querySelector("#invite-dialog").showModal();
+      try {
+        await refreshInvites();
+      } catch (error) {
+        toast("Не успях да заредя поканите.");
+      }
+    });
+    document.querySelector("#invite-close").addEventListener("click", function () {
+      document.querySelector("#invite-dialog").close();
+    });
+    document.querySelector("#invite-create").addEventListener("click", async function () {
+      const button = document.querySelector("#invite-create");
+      button.disabled = true;
+      try {
+        const code = inviteCode();
+        await firebase.firestore().collection("invites").doc(code).set({
+          createdAt: new Date().toISOString(),
+          used: false,
+          note: "",
+        });
+        const fresh = document.querySelector("#invite-fresh");
+        fresh.hidden = false;
+        fresh.textContent = "Нов код: " + code;
+        copyText(code);
+        await refreshInvites();
+      } catch (error) {
+        toast("Не успях да създам покана.");
+      }
+      button.disabled = false;
+    });
+
     firebase.auth().onAuthStateChanged(async function (user) {
       cloudUser = user;
       if (!user) {
         shownUid = "";
+        document.querySelector("#invite-open").hidden = true;
         showGate("form");
         document.querySelector("#auth-submit").disabled = false;
         return;
       }
+      if (claimingInvite) return;
       if (shownUid === user.uid) return;
-      shownUid = user.uid;
-      showGate("book");
+      let allowed = false;
       try {
-        await adoptRemote(user);
+        allowed = await ensureMember(user);
       } catch (error) {
-        toast("Не успях да отворя базата. Показвам копието от този браузър.");
+        shownUid = "";
+        pendingAuthError = "Не успях да проверя поканата. Опитай отново.";
+        await firebase.auth().signOut();
+        return;
       }
-      showBook(user.email);
+      if (!allowed) {
+        shownUid = "";
+        pendingAuthError = "Този акаунт няма покана.";
+        await firebase.auth().signOut();
+        return;
+      }
+      await enterApp(user);
     });
   }
 })();

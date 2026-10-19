@@ -1,11 +1,20 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /books/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow create, update: if request.auth != null
-        && request.auth.uid == userId
-        && request.resource.size() < 900000
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isOwner() {
+      return signedIn() && request.auth.token.email == "pavlinagargova@gmail.com";
+    }
+    function isMember() {
+      return signedIn() && exists(/databases/$(database)/documents/members/$(request.auth.uid));
+    }
+    function isAllowed() {
+      return isOwner() || isMember();
+    }
+    function validBook() {
+      return request.resource.size() < 900000
         && request.resource.data.keys().hasOnly(["version", "categories", "recipes", "updatedAt"])
         && request.resource.data.version == 1
         && request.resource.data.categories is list
@@ -13,7 +22,50 @@ service cloud.firestore {
         && request.resource.data.categories.size() < 80
         && request.resource.data.recipes.size() < 400
         && request.resource.data.updatedAt is string;
+    }
+
+    match /books/{userId} {
+      allow read: if isAllowed() && request.auth.uid == userId;
+      allow create, update: if isAllowed() && request.auth.uid == userId && validBook();
       allow delete: if false;
+    }
+
+    match /invites/{code} {
+      allow get: if true;
+      allow list: if isOwner() || (signedIn() && resource.data.usedBy == request.auth.uid);
+      allow create: if isOwner()
+        && code.matches("^[a-z0-9]{12}$")
+        && request.resource.data.keys().hasOnly(["createdAt", "used", "note"])
+        && request.resource.data.used == false
+        && request.resource.data.note == ""
+        && request.resource.data.createdAt is string
+        && request.resource.data.createdAt.size() < 40;
+      allow update: if signedIn()
+        && resource.data.used == false
+        && request.resource.data.keys().hasOnly(["createdAt", "used", "note", "usedBy", "usedEmail"])
+        && request.resource.data.used == true
+        && request.resource.data.usedBy == request.auth.uid
+        && request.resource.data.usedEmail == request.auth.token.email
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.note == resource.data.note;
+      allow delete: if isOwner();
+    }
+
+    match /members/{uid} {
+      allow get: if isOwner() || (signedIn() && request.auth.uid == uid);
+      allow list: if isOwner();
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(["email", "code", "createdAt"])
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.code is string
+        && request.resource.data.createdAt is string
+        && request.resource.data.createdAt.size() < 40
+        && exists(/databases/$(database)/documents/invites/$(request.resource.data.code))
+        && get(/databases/$(database)/documents/invites/$(request.resource.data.code)).data.used == true
+        && get(/databases/$(database)/documents/invites/$(request.resource.data.code)).data.usedBy == request.auth.uid;
+      allow delete: if isOwner();
+      allow update: if false;
     }
   }
 }

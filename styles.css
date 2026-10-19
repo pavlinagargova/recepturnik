@@ -532,6 +532,31 @@ dialog::backdrop { background: rgba(36, 28, 20, 0.45); }
 dialog h2 { margin: 0 0 8px; font-size: 28px; }
 dialog p { margin: 0 0 18px; color: var(--muted); }
 
+.invite-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.invite-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.invite-row code {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  letter-spacing: 0.03em;
+}
+
+.invite-row .quiet { flex: 1; min-width: 0; font-size: 13px; }
+.invite-row .btn { min-height: 36px; padding: 0 10px; }
+
 fieldset.colors { border: 0; margin: 16px 0; padding: 0; }
 fieldset.colors legend { padding: 0; }
 

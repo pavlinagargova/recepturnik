@@ -1,3 +1,4 @@
+window.RECEPTURNIK_OWNER = "pavlinagargova@gmail.com";
 window.RECEPTURNIK_FIREBASE = {
   apiKey: "AIzaSyAC2E_JN0i07Dl8lDj9tJopaHTXYyBXc4E",
   authDomain: "recepturnik-pavlina.firebaseapp.com",
