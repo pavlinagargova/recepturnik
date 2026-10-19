@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <title>Рецептурник</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%238a3b1e'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='16' font-family='Georgia,serif' fill='white'%3EР%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Към съдържанието</a>
+  <div class="app">
+    <header>
+      <div class="brand">
+        <span class="logo" aria-hidden="true">Р</span>
+        <div>
+          <p class="eyebrow">Лична книга</p>
+          <h1>Рецептурник</h1>
+          <p class="count-label" id="count-label">Празно засега</p>
+        </div>
+      </div>
+      <div class="tools">
+        <form class="search" id="search-form" role="search">
+          <label class="sr-only" for="search">Търсене</label>
+          <input id="search" type="search" placeholder="Търси по име или съставка" autocomplete="off">
+        </form>
+        <details class="menu" id="data-menu">
+          <summary>Данни</summary>
+          <div class="menu-panel">
+            <button type="button" id="export-btn">Свали копие</button>
+            <button type="button" id="import-btn">Зареди от файл</button>
+            <p>Копието е файл на компютъра ти. В браузъра рецептите си стоят и без него.</p>
+          </div>
+        </details>
+        <button type="button" class="btn btn-primary" id="new-recipe">Нова рецепта</button>
+      </div>
+    </header>
+    <div class="shell">
+      <nav id="sidebar" aria-label="Категории"></nav>
+      <main id="main" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <dialog id="category-dialog" aria-labelledby="category-title">
+    <form id="category-form">
+      <h2 id="category-title">Категория</h2>
+      <label class="field">
+        <span>Име</span>
+        <input id="category-name" maxlength="40" required autocomplete="off">
+      </label>
+      <fieldset class="colors">
+        <legend>Цвят</legend>
+        <div id="color-choices"></div>
+      </fieldset>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-danger" id="category-delete" hidden>Изтрий</button>
+        <span class="grow"></span>
+        <button type="button" class="btn btn-ghost" id="category-cancel">Отказ</button>
+        <button type="submit" class="btn btn-primary">Запази</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <h2 id="confirm-title"></h2>
+    <p id="confirm-text"></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-danger" id="confirm-extra" hidden></button>
+      <span class="grow"></span>
+      <button type="button" class="btn btn-ghost" id="confirm-cancel">Отказ</button>
+      <button type="button" class="btn btn-primary" id="confirm-ok">Потвърди</button>
+    </div>
+  </dialog>
+
+  <input type="file" id="import-file" accept="application/json,.json" hidden>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="parse.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
