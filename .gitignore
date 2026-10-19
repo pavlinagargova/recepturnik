@@ -1,2 +1,4 @@
 .DS_Store
 .idea/
+.firebase/
+firebase-debug.log

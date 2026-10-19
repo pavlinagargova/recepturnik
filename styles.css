@@ -122,6 +122,46 @@ h1 {
 
 .tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
+.account { display: flex; align-items: center; gap: 8px; }
+.account span {
+  color: var(--muted);
+  font-size: 13px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.gate-card {
+  width: min(420px, 100%);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 28px 24px 22px;
+  display: grid;
+  gap: 14px;
+}
+
+.gate-card h2 {
+  margin: 2px 0 0;
+  font-family: var(--serif);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.gate-card form { display: grid; gap: 12px; }
+.gate-card .btn { width: 100%; }
+.auth-error { margin: 0; color: #8a2e1f; font-size: 14px; font-weight: 600; }
+
 .search input, .field input, .field textarea, .field select, .line-row input, .line-row textarea, .paste textarea {
   width: 100%;
   border: 1px solid var(--line);
@@ -564,7 +604,7 @@ fieldset.colors legend { padding: 0; }
 
 @media print {
   body { background: white; }
-  header, #sidebar, .recipe-actions, .star, .no-print, #toast, dialog { display: none !important; }
+  header, #sidebar, .recipe-actions, .star, .no-print, #toast, dialog, .gate { display: none !important; }
   .app { max-width: none; padding: 0; }
   .shell { display: block; }
   .card, .ingredients { box-shadow: none; }

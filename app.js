@@ -121,7 +121,19 @@
     }
   }
 
-  let backupTimer = 0;
+  const UID_KEY = "recepturnik.uid";
+  let cloudUser = null;
+  let remoteTimer = 0;
+  let syncing = false;
+
+  function bookPayload() {
+    return {
+      version: 1,
+      categories: db.categories,
+      recipes: db.recipes,
+      updatedAt: new Date().toISOString(),
+    };
+  }
 
   function persist() {
     try {
@@ -130,11 +142,43 @@
       toast("Не успях да запазя. Паметта на браузъра може да е пълна.");
       return;
     }
-    window.clearTimeout(backupTimer);
-    backupTimer = window.setTimeout(function () {
-      downloadBackup("recepturnik-backup.json");
-      toast("Имаш копие във файловете: recepturnik-backup.json");
-    }, 600);
+    queueRemoteSave();
+  }
+
+  function queueRemoteSave() {
+    if (!cloudUser || syncing) return;
+    window.clearTimeout(remoteTimer);
+    remoteTimer = window.setTimeout(writeRemote, 400);
+  }
+
+  function writeRemote() {
+    if (!cloudUser) return;
+    return firebase.firestore().collection("books").doc(cloudUser.uid).set(bookPayload()).catch(function () {
+      toast("Не успях да запиша в базата. В браузъра копието е запазено.");
+    });
+  }
+
+  async function adoptRemote(user) {
+    syncing = true;
+    window.clearTimeout(remoteTimer);
+    try {
+      const ref = firebase.firestore().collection("books").doc(user.uid);
+      const snap = await ref.get();
+      const previousUid = localStorage.getItem(UID_KEY);
+      const localIsThisUser = !previousUid || previousUid === user.uid;
+      if (snap.exists) {
+        db = sanitizeState(snap.data() || {});
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+      } else if (localIsThisUser && db.recipes.length) {
+        await ref.set(bookPayload());
+      } else if (!localIsThisUser) {
+        db = blankState();
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+      }
+      localStorage.setItem(UID_KEY, user.uid);
+    } finally {
+      syncing = false;
+    }
   }
 
   function downloadBackup(filename) {
@@ -352,7 +396,7 @@ function renderSidebar() {
         id: "add-category",
         onclick: function () { openCategoryDialog(null); },
       }, "Нова категория"),
-      el("p", { class: "side-hint" }, "Затварянето на страницата не ги трие. При промяна се сваля и файл.")
+      el("p", { class: "side-hint" }, "Рецептите са в акаунта ти. Същите те чакат и на телефона, и на компютъра.")
     );
   }
 
@@ -403,7 +447,7 @@ function renderSidebar() {
         el("div", { class: "plate", "aria-hidden": "true" }),
         el("h2", {}, "Все още няма рецепти"),
         el("p", { class: "lead" }, "Когато намериш нещо вкусно, запази го тук. Сложи категория, връзка към страницата и текста на рецептата."),
-        el("p", { class: "quiet" }, "Остават при затваряне на страницата. При всяко запазване се сваля и файл recepturnik-backup.json."),
+        el("p", { class: "quiet" }, "Затварянето на страницата не ги трие. На друго устройство влез със същия имейл."),
         el("div", { class: "actions" }, [
           el("button", { type: "button", class: "btn btn-primary", onclick: function () { go({ name: "edit" }); } }, "Нова рецепта"),
         ]),
@@ -1049,7 +1093,6 @@ function renderSidebar() {
 
   function exportData() {
     closeMenu();
-    window.clearTimeout(backupTimer);
     downloadBackup("recepturnik-backup.json");
     toast("Копието е свалено");
   }
@@ -1165,5 +1208,137 @@ function renderSidebar() {
     navigator.storage.persist().catch(function () {});
   }
 
-  render();
+  const authModes = {
+    login: {
+      title: "Вход",
+      submit: "Влез",
+      switchLabel: "Нямам акаунт",
+      password: "current-password",
+    },
+    register: {
+      title: "Нов акаунт",
+      submit: "Създай акаунт",
+      switchLabel: "Имам акаунт",
+      password: "new-password",
+    },
+  };
+  let authMode = "login";
+
+  function authErrorText(code) {
+    if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found" || code === "auth/invalid-login-credentials") {
+      return "Имейлът или паролата не съвпадат.";
+    }
+    if (code === "auth/email-already-in-use") return "Този имейл вече има акаунт. Влез с него.";
+    if (code === "auth/weak-password") return "Паролата трябва да е поне 6 знака.";
+    if (code === "auth/invalid-email") return "Този имейл не изглежда верен.";
+    if (code === "auth/too-many-requests") return "Твърде много опити. Изчакай малко и пробвай пак.";
+    if (code === "auth/network-request-failed") return "Няма връзка. Провери интернета.";
+    return "Не успях. Опитай отново.";
+  }
+
+  function showAuthError(message) {
+    const node = document.querySelector("#auth-error");
+    node.hidden = !message;
+    node.textContent = message || "";
+  }
+
+  function setAuthMode(mode) {
+    authMode = mode;
+    const copy = authModes[mode];
+    document.querySelector("#gate-title").textContent = copy.title;
+    document.querySelector("#auth-submit").textContent = copy.submit;
+    document.querySelector("#auth-switch").textContent = copy.switchLabel;
+    document.querySelector("#auth-password").setAttribute("autocomplete", copy.password);
+    showAuthError("");
+  }
+
+  function showGate(stateName) {
+    const gate = document.querySelector("#gate");
+    const form = document.querySelector("#auth-form");
+    const wait = document.querySelector("#gate-wait");
+    const app = document.querySelector("#app");
+    gate.hidden = false;
+    app.hidden = true;
+    if (stateName === "form") {
+      wait.hidden = true;
+      form.hidden = false;
+      setAuthMode(authMode);
+      return;
+    }
+    form.hidden = true;
+    wait.hidden = false;
+    document.querySelector("#gate-title").textContent = "Рецептурник";
+    wait.textContent = stateName === "book" ? "Зареждам книгата..." : "Проверявам входа...";
+  }
+
+  function showBook(email) {
+    document.querySelector("#gate").hidden = true;
+    document.querySelector("#app").hidden = false;
+    document.querySelector("#account-label").textContent = email || "";
+    render();
+  }
+
+  document.querySelector("#auth-switch").addEventListener("click", function () {
+    setAuthMode(authMode === "login" ? "register" : "login");
+    document.querySelector("#auth-email").focus();
+  });
+
+  document.querySelector("#auth-form").addEventListener("submit", async function (event) {
+    event.preventDefault();
+    const email = document.querySelector("#auth-email").value.trim();
+    const password = document.querySelector("#auth-password").value;
+    const submit = document.querySelector("#auth-submit");
+    showAuthError("");
+    submit.disabled = true;
+    try {
+      const auth = firebase.auth();
+      if (authMode === "register") await auth.createUserWithEmailAndPassword(email, password);
+      else await auth.signInWithEmailAndPassword(email, password);
+    } catch (error) {
+      showAuthError(authErrorText(error && error.code));
+      submit.disabled = false;
+    }
+  });
+
+  document.querySelector("#sign-out").addEventListener("click", async function () {
+    if (isDirty()) {
+      const ok = await ask({
+        title: "Незапазени промени",
+        text: "Ако продължиш, написаното в рецептата няма да се запази.",
+        confirmLabel: "Излез",
+        danger: true,
+      });
+      if (!ok) return;
+      isDirty = function () { return false; };
+    }
+    firebase.auth().signOut();
+  });
+
+  if (!window.firebase || !window.RECEPTURNIK_FIREBASE) {
+    showGate("form");
+    showAuthError("Базата не се зареди. Презареди страницата.");
+    document.querySelector("#auth-submit").disabled = true;
+    document.querySelector("#auth-switch").disabled = true;
+  } else {
+    firebase.initializeApp(window.RECEPTURNIK_FIREBASE);
+    let shownUid = "";
+    firebase.auth().onAuthStateChanged(async function (user) {
+      cloudUser = user;
+      if (!user) {
+        shownUid = "";
+        showGate("form");
+        document.querySelector("#auth-submit").disabled = false;
+        return;
+      }
+      if (shownUid === user.uid) return;
+      shownUid = user.uid;
+      showGate("book");
+      try {
+        await adoptRemote(user);
+      } catch (error) {
+        toast("Не успях да отворя базата. Показвам копието от този браузър.");
+      }
+      showBook(user.email);
+    });
+  }
 })();

@@ -10,7 +10,31 @@
 </head>
 <body>
   <a class="skip" href="#main">Към съдържанието</a>
-  <div class="app">
+  <div id="gate" class="gate">
+    <div class="gate-card">
+      <span class="logo" aria-hidden="true">Р</span>
+      <div>
+        <p class="eyebrow">Лична книга</p>
+        <h2 id="gate-title">Рецептурник</h2>
+      </div>
+      <p id="gate-wait" class="quiet">Проверявам входа...</p>
+      <form id="auth-form" hidden>
+        <p class="quiet" id="auth-lead">Рецептите стоят в акаунта ти, така че ги имаш и на телефона, и на компютъра.</p>
+        <label class="field">
+          <span>Имейл</span>
+          <input id="auth-email" type="email" autocomplete="username" inputmode="email" required>
+        </label>
+        <label class="field">
+          <span>Парола</span>
+          <input id="auth-password" type="password" autocomplete="current-password" minlength="6" required>
+        </label>
+        <p id="auth-error" class="auth-error" hidden></p>
+        <button type="submit" class="btn btn-primary" id="auth-submit">Влез</button>
+        <button type="button" class="btn btn-ghost" id="auth-switch">Нямам акаунт</button>
+      </form>
+    </div>
+  </div>
+  <div class="app" id="app" hidden>
     <header>
       <div class="brand">
         <span class="logo" aria-hidden="true">Р</span>
@@ -25,12 +49,16 @@
           <label class="sr-only" for="search">Търсене</label>
           <input id="search" type="search" placeholder="Търси по име или съставка" autocomplete="off">
         </form>
+        <div class="account">
+          <span id="account-label"></span>
+          <button type="button" class="btn btn-ghost" id="sign-out">Изход</button>
+        </div>
         <details class="menu" id="data-menu">
           <summary>Данни</summary>
           <div class="menu-panel">
             <button type="button" id="export-btn">Свали копие</button>
             <button type="button" id="import-btn">Зареди от файл</button>
-            <p>При всяка промяна се сваля recepturnik-backup.json. С него връщаш рецептите, ако браузърът ги изчисти.</p>
+            <p>Книгата се пази в акаунта ти. Свали копие, ако искаш и файл на компютъра.</p>
           </div>
         </details>
         <button type="button" class="btn btn-primary" id="new-recipe">Нова рецепта</button>
@@ -75,6 +103,10 @@
 
   <input type="file" id="import-file" accept="application/json,.json" hidden>
   <div id="toast" role="status" aria-live="polite"></div>
+  <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore-compat.js"></script>
+  <script src="config.js"></script>
   <script src="parse.js"></script>
   <script src="app.js"></script>
 </body>
