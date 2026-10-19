@@ -119,12 +119,44 @@
       }
     }
 
-    result.ingredients = result.ingredients.map((item) => item.trim()).filter(Boolean).slice(0, 80);
+    result.ingredients = result.ingredients.map(splitIngredient).filter(Boolean).slice(0, 80);
     result.steps = result.steps.map((item) => item.trim()).filter(Boolean).slice(0, 80);
     return result;
   }
 
-  publish({ parseRecipeText });
+  function canonicalUnit(raw) {
+    const value = String(raw || "").toLowerCase().replace(/[\s.]+/g, "");
+    if (!value) return "";
+    if (value === "кг" || value === "kg") return "кг";
+    if (value === "г" || value === "гр" || value === "g") return "г";
+    if (value === "мл" || value === "ml") return "мл";
+    if (value === "л" || value.indexOf("лит") === 0) return "л";
+    if (value.indexOf("щип") === 0) return "щипка";
+    if (value.indexOf("скилид") === 0) return "скилидка";
+    if (value.indexOf("глав") === 0) return "глава";
+    if (value.indexOf("връз") === 0) return "връзка";
+    if (value.indexOf("чаш") === 0) return "чаша";
+    if (value.indexOf("чл") === 0 || value.indexOf("чаен") === 0) return "ч.л.";
+    if (value.indexOf("сл") === 0 || value.indexOf("супен") === 0) return "с.л.";
+    if (value.indexOf("бр") === 0) return "бр.";
+    return "";
+  }
+
+  function splitIngredient(line) {
+    const text = String(line || "").replace(/\s+/g, " ").trim();
+    if (!text) return null;
+    const match = text.match(/^(\d+(?:[.,]\d+)?(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?|\d+\s*\/\s*\d+|[¼½¾⅓⅔])\s*(кг|гр|г|мл|литри|литра|литър|л|щипки|щипка|скилидки|скилидка|глави|глава|връзки|връзка|чаши|чаша|с\.\s*л\.?|ч\.\s*л\.?|супени лъжици|супена лъжица|чаени лъжици|чаена лъжица|броя|бр\.?)?\s+(.+)$/i);
+    if (!match) return { name: text.slice(0, 160), amount: "", unit: "" };
+    const name = match[3].replace(/^[,.\s]+/, "").trim();
+    if (!name) return { name: text.slice(0, 160), amount: "", unit: "" };
+    return {
+      name: name.slice(0, 160),
+      amount: match[1].replace(/\s+/g, ""),
+      unit: canonicalUnit(match[2] || ""),
+    };
+  }
+
+  publish({ parseRecipeText, splitIngredient });
 })(function (api) {
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (typeof window !== "undefined") window.RecipeParse = api;

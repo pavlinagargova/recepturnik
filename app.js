@@ -1,6 +1,8 @@
 (function () {
   const STORAGE_KEY = "recepturnik.v1";
   const COLORS = ["#8a3b1e", "#c47a3a", "#2f4a36", "#3d6b58", "#3d5a73", "#7a3e55", "#6a4632", "#8a6a2f", "#6d6256"];
+  const UNITS = ["г", "кг", "мл", "л", "ч.л.", "с.л.", "бр.", "щипка", "чаша", "връзка", "скилидка", "глава", "по вкус"];
+  const photoCache = {};
   const DEFAULT_NAMES = ["Закуски", "Супи", "Салати", "Основни", "Тестени", "Десерти", "Хляб", "Напитки", "Други"];
 
   const state = {
@@ -57,6 +59,29 @@
     return value.map(function (item) { return cleanString(item, maxLength); }).filter(Boolean).slice(0, maxItems);
   }
 
+  function sanitizeIngredient(item) {
+    const parsed = typeof item === "string" && window.RecipeParse && RecipeParse.splitIngredient
+      ? RecipeParse.splitIngredient(item)
+      : item;
+    if (!parsed || typeof parsed !== "object") return null;
+    const name = cleanString(parsed.name, 160);
+    const amount = cleanString(parsed.amount, 20);
+    const unit = UNITS.indexOf(parsed.unit) >= 0 ? parsed.unit : "";
+    if (!name && !amount) return null;
+    return { name: name, amount: amount, unit: unit };
+  }
+
+  function ingredientList(value) {
+    if (!Array.isArray(value)) return [];
+    return value.map(sanitizeIngredient).filter(Boolean).slice(0, 80);
+  }
+
+  function ingredientText(item) {
+    if (!item) return "";
+    if (typeof item === "string") return item;
+    return [item.amount, item.unit, item.name].filter(Boolean).join(" ");
+  }
+
   function blankState() {
     return {
       version: 1,
@@ -90,9 +115,10 @@
       sourceUrl: cleanString(recipe.sourceUrl, 500),
       servings: cleanString(recipe.servings, 40),
       time: cleanString(recipe.time, 40),
-      ingredients: stringList(recipe.ingredients, 80, 300),
+      ingredients: ingredientList(recipe.ingredients),
       steps: stringList(recipe.steps, 80, 2000),
       notes: cleanString(recipe.notes, 5000),
+      hasPhoto: Boolean(recipe.hasPhoto),
       favorite: Boolean(recipe.favorite),
       createdAt: createdAt,
       updatedAt: cleanDate(recipe.updatedAt || createdAt),
@@ -158,6 +184,84 @@
     });
   }
 
+  function photoDoc(recipeId) {
+    return firebase.firestore().collection("photos").doc(cloudUser.uid).collection("items").doc(recipeId);
+  }
+
+  function loadPhoto(recipeId) {
+    if (Object.prototype.hasOwnProperty.call(photoCache, recipeId)) return Promise.resolve(photoCache[recipeId]);
+    if (!cloudUser) return Promise.resolve("");
+    return photoDoc(recipeId).get().then(function (snap) {
+      const image = snap.exists && snap.data() && typeof snap.data().image === "string" ? snap.data().image : "";
+      photoCache[recipeId] = image;
+      return image;
+    }).catch(function () {
+      return "";
+    });
+  }
+
+  function paintPhotos(root) {
+    const scope = root || document;
+    scope.querySelectorAll("[data-photo]").forEach(function (node) {
+      const id = node.getAttribute("data-photo");
+      const recipe = findRecipe(id);
+      if (!recipe || !recipe.hasPhoto) return;
+      loadPhoto(id).then(function (src) {
+        if (!src || !node.isConnected) return;
+        let img = node.querySelector("img");
+        if (!img) {
+          img = el("img", { alt: recipe.title });
+          node.append(img);
+        }
+        img.alt = recipe.title;
+        img.src = src;
+      });
+    });
+  }
+
+  function compressImage(file) {
+    return new Promise(function (resolve, reject) {
+      if (!file || !/^image\//.test(file.type)) {
+        reject(new Error("type"));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onerror = function () { reject(new Error("read")); };
+      reader.onload = function () {
+        const img = new Image();
+        img.onerror = function () { reject(new Error("load")); };
+        img.onload = function () {
+          const maxSide = 1400;
+          const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(img.width * scale));
+          canvas.height = Math.max(1, Math.round(img.height * scale));
+          canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+          let quality = 0.72;
+          let data = canvas.toDataURL("image/jpeg", quality);
+          while (data.length > 480000 && quality > 0.42) {
+            quality -= 0.08;
+            data = canvas.toDataURL("image/jpeg", quality);
+          }
+          if (data.length > 520000) reject(new Error("big"));
+          else resolve(data);
+        };
+        img.src = String(reader.result || "");
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function savePhoto(recipeId, image) {
+    if (!cloudUser) return Promise.resolve();
+    if (!image) {
+      delete photoCache[recipeId];
+      return photoDoc(recipeId).delete().catch(function () {});
+    }
+    photoCache[recipeId] = image;
+    return photoDoc(recipeId).set({ image: image, updatedAt: new Date().toISOString() });
+  }
+
   async function adoptRemote(user) {
     syncing = true;
     window.clearTimeout(remoteTimer);
@@ -181,8 +285,9 @@
     }
   }
 
-  function downloadBackup(filename) {
-    const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
+  function downloadBackup(filename, extra) {
+    const payload = extra ? Object.assign({}, db, extra) : db;
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -271,7 +376,7 @@
     const query = state.query.trim().toLowerCase();
     if (!query) return true;
     const blob = [recipe.title, recipe.notes, recipe.sourceUrl]
-      .concat(recipe.ingredients, recipe.steps)
+      .concat(recipe.ingredients.map(ingredientText), recipe.steps)
       .join("\n")
       .toLowerCase();
     return blob.indexOf(query) !== -1;
@@ -421,7 +526,7 @@ function renderSidebar() {
   }
 
   function previewText(recipe) {
-    if (recipe.ingredients.length) return recipe.ingredients.slice(0, 3).join(", ");
+    if (recipe.ingredients.length) return recipe.ingredients.slice(0, 3).map(ingredientText).join(", ");
     if (recipe.notes) return recipe.notes.slice(0, 90);
     if (recipe.sourceUrl) return siteLabel(recipe.sourceUrl);
     return "Без подробности";
@@ -473,6 +578,7 @@ function renderSidebar() {
       const card = el("article", { class: "card" });
       card.dataset.id = recipe.id;
       card.style.borderTopColor = category ? category.color : "#d7cbb8";
+      if (recipe.hasPhoto) card.append(el("div", { class: "card-photo", "data-photo": recipe.id }));
       const open = el("button", {
         type: "button",
         class: "card-open",
@@ -528,7 +634,7 @@ function renderSidebar() {
       const row = el("li");
       const label = el("label", { class: input.checked ? "ingredient done" : "ingredient" }, [
         input,
-        el("span", {}, item),
+        el("span", {}, ingredientText(item)),
       ]);
       input.addEventListener("change", function () {
         if (!state.checks[recipe.id]) state.checks[recipe.id] = {};
@@ -552,6 +658,7 @@ function renderSidebar() {
       }, "Към рецептите"),
       el("p", { class: "kicker" }, category ? category.name : "Без категория"),
       el("h2", { class: "sheet-title" }, recipe.title),
+      recipe.hasPhoto ? el("div", { class: "recipe-photo", "data-photo": recipe.id }) : null,
       meta ? el("p", { class: "meta-line" }, meta) : null,
       (function () {
         if (!recipe.sourceUrl) return null;
@@ -602,6 +709,7 @@ function renderSidebar() {
       if (!ok) return;
       db.recipes = db.recipes.filter(function (item) { return item.id !== recipe.id; });
       delete state.checks[recipe.id];
+      if (recipe.hasPhoto) savePhoto(recipe.id, "");
       persist();
       toast("Рецептата е изтрита");
       go({ name: "list" });
@@ -618,7 +726,14 @@ function renderSidebar() {
       servings: document.querySelector("#field-servings").value.trim(),
       sourceUrl: document.querySelector("#field-source").value.trim(),
       notes: document.querySelector("#field-notes").value.trim(),
-      ingredients: Array.from(document.querySelectorAll("#ingredient-list input")).map(function (input) { return input.value.trim(); }).filter(Boolean),
+      ingredients: Array.from(document.querySelectorAll("#ingredient-list .ingredient-row")).map(function (row) {
+        return sanitizeIngredient({
+          name: row.querySelector("[data-part='name']").value,
+          amount: row.querySelector("[data-part='amount']").value,
+          unit: row.querySelector("[data-part='unit']").value,
+        });
+      }).filter(Boolean),
+      photo: (document.querySelector("#photo-preview") && document.querySelector("#photo-preview").getAttribute("src")) || "",
       steps: Array.from(document.querySelectorAll("#step-list textarea")).map(function (input) { return input.value.trim(); }).filter(Boolean),
     };
   }
@@ -695,6 +810,57 @@ function renderSidebar() {
     return { add: add, refill: refill };
   }
 
+  function bindIngredients(list) {
+    function add(value, afterRow, focus) {
+      const item = sanitizeIngredient(value) || { name: "", amount: "", unit: "" };
+      const row = el("div", { class: "line-row ingredient-row" });
+      const name = el("input", { type: "text", "data-part": "name", value: item.name, maxlength: "160", placeholder: "сирене", "aria-label": "Име" });
+      const amount = el("input", { type: "text", "data-part": "amount", value: item.amount, maxlength: "20", placeholder: "200", inputmode: "decimal", "aria-label": "Количество" });
+      const unit = el("select", { "data-part": "unit", "aria-label": "Мерна единица" });
+      unit.append(new Option("Мярка", ""));
+      UNITS.forEach(function (choice) { unit.append(new Option(choice, choice)); });
+      if (item.unit) unit.value = item.unit;
+      const remove = el("button", { type: "button", class: "icon-btn", "aria-label": "Премахни съставката" }, "×");
+      function focusRow(target) {
+        if (!target) return;
+        const field = target.querySelector("[data-part='name']");
+        if (field) field.focus();
+      }
+      remove.addEventListener("click", function () {
+        const previous = row.previousElementSibling;
+        row.remove();
+        if (!list.children.length) add(null);
+        else focusRow(previous || list.querySelector(".ingredient-row"));
+      });
+      function onKey(event) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          add(null, row, true);
+        }
+        if (event.key === "Backspace" && name.value === "" && amount.value === "" && list.children.length > 1) {
+          event.preventDefault();
+          const previous = row.previousElementSibling;
+          row.remove();
+          focusRow(previous || list.querySelector(".ingredient-row"));
+        }
+      }
+      name.addEventListener("keydown", onKey);
+      amount.addEventListener("keydown", onKey);
+      row.append(name, amount, unit, remove);
+      if (afterRow && afterRow.parentNode === list) afterRow.after(row);
+      else list.append(row);
+      if (focus) name.focus();
+    }
+
+    function refill(values) {
+      list.replaceChildren();
+      if (!values.length) add(null);
+      else values.forEach(function (value) { add(value); });
+    }
+
+    return { add: add, refill: refill };
+  }
+
   function renderEditor() {
     const existing = state.route.id ? findRecipe(state.route.id) : null;
     if (state.route.id && !existing) return renderMissing();
@@ -706,11 +872,7 @@ function renderSidebar() {
     const form = el("form", { class: "sheet editor", id: "editor-form", autocomplete: "off" });
     const ingredientList = el("div", { class: "line-list", id: "ingredient-list" });
     const stepList = el("div", { class: "line-list step-list", id: "step-list" });
-    const ingredients = bindList(ingredientList, {
-      placeholder: "напр. 200 г сирене",
-      label: "Съставка",
-      removeLabel: "Премахни съставката",
-    });
+    const ingredients = bindIngredients(ingredientList);
     const steps = bindList(stepList, {
       multiline: true,
       placeholder: "Какво се прави",
@@ -752,6 +914,17 @@ function renderSidebar() {
           el("span", {}, "Име"),
           el("input", { id: "field-title", name: "title", maxlength: "120", required: true, value: existing ? existing.title : "", placeholder: "напр. Таратор" }),
         ]),
+        el("div", { class: "photo-field" }, [
+          el("span", { class: "block-title" }, "Снимка"),
+          el("img", { id: "photo-preview", alt: "", hidden: true }),
+          el("div", { class: "photo-actions" }, [
+            el("label", { class: "btn btn-ghost" }, [
+              "Избери снимка",
+              el("input", { id: "photo-input", type: "file", accept: "image/*", hidden: true }),
+            ]),
+            el("button", { type: "button", class: "btn btn-ghost", id: "photo-clear", hidden: true }, "Махни снимката"),
+          ]),
+        ]),
         el("div", { class: "meta-grid" }, [
           el("div", { class: "with-button" }, [
             el("label", { class: "field" }, [
@@ -776,8 +949,13 @@ function renderSidebar() {
         paste,
         el("section", {}, [
           el("h3", { class: "block-title" }, "Съставки"),
+          el("div", { class: "ingredient-head" }, [
+            el("span", {}, "Име"),
+            el("span", {}, "Количество"),
+            el("span", {}, "Мерна единица"),
+          ]),
           ingredientList,
-          el("button", { type: "button", class: "btn btn-ghost", onclick: function () { ingredients.add("", null, true); } }, "Добави съставка"),
+          el("button", { type: "button", class: "btn btn-ghost", onclick: function () { ingredients.add(null, null, true); } }, "Добави съставка"),
         ]),
         el("section", {}, [
           el("h3", { class: "block-title" }, "Начин на приготвяне"),
@@ -791,13 +969,32 @@ function renderSidebar() {
       ]),
       el("div", { class: "editor-actions" }, [
         el("button", { type: "button", class: "btn btn-ghost", onclick: function () { go(existing ? { name: "detail", id: existing.id } : { name: "list" }); } }, "Отказ"),
-        el("button", { type: "submit", class: "btn btn-primary" }, "Запази"),
+        el("button", { type: "submit", class: "btn btn-primary", id: "editor-save", disabled: Boolean(existing && existing.hasPhoto) }, "Запази"),
       ])
     );
 
     form.addEventListener("submit", function (event) {
       event.preventDefault();
       saveEditor(existing);
+    });
+    form.querySelector("#photo-input").addEventListener("change", function (event) {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = "";
+      if (!file) return;
+      compressImage(file).then(function (src) {
+        const preview = form.querySelector("#photo-preview");
+        preview.setAttribute("src", src);
+        preview.hidden = false;
+        form.querySelector("#photo-clear").hidden = false;
+      }).catch(function (error) {
+        toast(error && error.message === "big" ? "Снимката е твърде голяма." : "Тази снимка не се чете. Пробвай с JPG или PNG.");
+      });
+    });
+    form.querySelector("#photo-clear").addEventListener("click", function () {
+      const preview = form.querySelector("#photo-preview");
+      preview.removeAttribute("src");
+      preview.hidden = true;
+      form.querySelector("#photo-clear").hidden = true;
     });
     form.addEventListener("keydown", function (event) {
       if (event.key !== "Enter" || event.target.tagName !== "INPUT") return;
@@ -909,7 +1106,14 @@ function renderSidebar() {
     field.value = Array.from(field.options).some(function (option) { return option.value === keep; }) ? keep : "";
   }
 
-  function saveEditor(existing) {
+  let savingEditor = false;
+
+  async function saveEditor(existing) {
+    if (savingEditor) return;
+    if (document.querySelector("#editor-form") && document.querySelector("#editor-form").dataset.photoReady === "0") {
+      toast("Снимката още се зарежда.");
+      return;
+    }
     const data = readForm();
     if (!data) return;
     const titleInput = document.querySelector("#field-title");
@@ -932,6 +1136,7 @@ function renderSidebar() {
         return;
       }
     }
+    savingEditor = true;
     const now = new Date().toISOString();
     const recipe = {
       id: existing ? existing.id : uid(),
@@ -943,6 +1148,7 @@ function renderSidebar() {
       ingredients: data.ingredients,
       steps: data.steps,
       notes: data.notes,
+      hasPhoto: Boolean(data.photo),
       favorite: existing ? existing.favorite : false,
       createdAt: existing ? existing.createdAt : now,
       updatedAt: now,
@@ -951,8 +1157,23 @@ function renderSidebar() {
     if (index >= 0) db.recipes[index] = recipe;
     else db.recipes.push(recipe);
     delete state.checks[recipe.id];
+    const previousPhoto = existing && existing.hasPhoto ? (photoCache[recipe.id] || "") : "";
     persist();
+    try {
+      if (data.photo !== previousPhoto || Boolean(data.photo) !== Boolean(existing && existing.hasPhoto)) {
+        await savePhoto(recipe.id, data.photo);
+      }
+    } catch (error) {
+      recipe.hasPhoto = Boolean(existing && existing.hasPhoto);
+      persist();
+      toast("Рецептата е запазена, но снимката не се качи.");
+      savingEditor = false;
+      isDirty = function () { return false; };
+      go({ name: "detail", id: recipe.id });
+      return;
+    }
     isDirty = function () { return false; };
+    savingEditor = false;
     toast("Рецептата е запазена");
     go({ name: "detail", id: recipe.id });
   }
@@ -973,18 +1194,40 @@ function renderSidebar() {
 
   function renderMain() {
     if (state.route.name === "edit") {
-      mount(renderEditor());
-      armDirtyCheck();
-      const title = document.querySelector("#field-title");
-      if (title && !state.route.id) title.focus();
+      const editing = state.route.id ? findRecipe(state.route.id) : null;
+      const editor = renderEditor();
+      if (editing && editing.hasPhoto) editor.dataset.photoReady = "0";
+      mount(editor);
+      const ready = editing && editing.hasPhoto ? loadPhoto(editing.id) : Promise.resolve("");
+      ready.then(function (src) {
+        const current = document.querySelector("#editor-form");
+        if (!current || current !== editor) return;
+        if (src) {
+          const preview = document.querySelector("#photo-preview");
+          if (preview) {
+            preview.setAttribute("src", src);
+            preview.hidden = false;
+            const clear = document.querySelector("#photo-clear");
+            if (clear) clear.hidden = false;
+          }
+        }
+        editor.dataset.photoReady = "1";
+        const save = document.querySelector("#editor-save");
+        if (save) save.disabled = false;
+        armDirtyCheck();
+        const title = document.querySelector("#field-title");
+        if (title && !state.route.id) title.focus();
+      });
       return;
     }
     if (state.route.name === "detail") {
       const recipe = findRecipe(state.route.id);
       mount(recipe ? renderDetail(recipe) : renderMissing());
+      paintPhotos(document.querySelector("#main"));
       return;
     }
     mount(renderList());
+    paintPhotos(document.querySelector("#main"));
   }
 
   function render() {
@@ -1091,19 +1334,49 @@ function renderSidebar() {
     document.querySelector("#data-menu").open = false;
   }
 
-  function exportData() {
+  async function exportData() {
     closeMenu();
-    downloadBackup("recepturnik-backup.json");
+    const photos = {};
+    const withPhotos = db.recipes.filter(function (recipe) { return recipe.hasPhoto; });
+    try {
+      for (let index = 0; index < withPhotos.length; index += 1) {
+        const recipe = withPhotos[index];
+        const image = await loadPhoto(recipe.id);
+        if (image) photos[recipe.id] = image;
+      }
+    } catch (error) {
+      toast("Копието е без някои снимки.");
+    }
+    downloadBackup("recepturnik-backup.json", { photos: photos });
     toast("Копието е свалено");
   }
 
   function importPayload(data) {
-    if (Array.isArray(data)) return sanitizeState({ categories: [], recipes: data });
+    const photos = data && typeof data === "object" && !Array.isArray(data) && data.photos && typeof data.photos === "object" ? data.photos : {};
+    if (Array.isArray(data)) return { book: sanitizeState({ categories: [], recipes: data }), photos: {} };
     if (!data || typeof data !== "object" || !Array.isArray(data.recipes)) return null;
-    return sanitizeState(data);
+    return { book: sanitizeState(data), photos: photos };
   }
 
-  function mergeImport(incoming) {
+  async function storeImportedPhotos(photos, ids) {
+    const wanted = ids || null;
+    const keys = Object.keys(photos || {});
+    for (let index = 0; index < keys.length; index += 1) {
+      const id = keys[index];
+      if (wanted && wanted.indexOf(id) === -1) continue;
+      const image = photos[id];
+      const recipe = findRecipe(id);
+      if (!recipe || !recipe.hasPhoto) continue;
+      if (typeof image !== "string" || image.indexOf("data:image/jpeg;base64,") !== 0 || image.length > 520000) continue;
+      try {
+        await savePhoto(id, image);
+      } catch (error) {
+        toast("Една снимка не се качи.");
+      }
+    }
+  }
+
+  function mergeImport(incoming, addedIds) {
     const idMap = new Map();
     incoming.categories.forEach(function (category) {
       const existing = db.categories.find(function (item) {
@@ -1118,6 +1391,7 @@ function renderSidebar() {
     let added = 0;
     incoming.recipes.forEach(function (recipe) {
       if (db.recipes.some(function (item) { return item.id === recipe.id; })) return;
+      if (addedIds) addedIds.push(recipe.id);
       if (recipe.categoryId) {
         recipe.categoryId = idMap.get(recipe.categoryId) || (isRealCategory(recipe.categoryId) ? recipe.categoryId : "");
       }
@@ -1144,11 +1418,12 @@ function renderSidebar() {
       toast("Този файл не прилича на рецептурник");
       return;
     }
+    const book = incoming.book;
     let choice = "add";
     if (db.recipes.length) {
       choice = await ask({
         title: "Зареждане от файл",
-        text: "Във файла има " + formatCount(incoming.recipes.length) + ". Можеш да добавиш само новите или да замениш цялата книга с файла.",
+        text: "Във файла има " + formatCount(book.recipes.length) + ". Можеш да добавиш само новите или да замениш цялата книга с файла.",
         confirmLabel: "Добави новите",
         confirmValue: "add",
         extraLabel: "Замени сегашните",
@@ -1159,16 +1434,19 @@ function renderSidebar() {
     if (choice === "replace") {
       db = {
         version: 1,
-        categories: incoming.categories,
-        recipes: incoming.recipes,
+        categories: book.categories,
+        recipes: book.recipes,
       };
       state.categoryId = "all";
       persist();
+      await storeImportedPhotos(incoming.photos);
       render();
       toast("Книгата е заменена");
       return;
     }
-    const added = mergeImport(incoming);
+    const addedIds = [];
+    const added = mergeImport(book, addedIds);
+    await storeImportedPhotos(incoming.photos, addedIds);
     persist();
     render();
     if (added === 0) toast("Нямаше нови рецепти във файла");

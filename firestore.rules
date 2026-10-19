@@ -51,6 +51,20 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+    match /photos/{userId}/items/{recipeId} {
+      allow read: if isAllowed() && request.auth.uid == userId;
+      allow create, update: if isAllowed()
+        && request.auth.uid == userId
+        && request.resource.size() < 800000
+        && request.resource.data.keys().hasOnly(["image", "updatedAt"])
+        && request.resource.data.image is string
+        && request.resource.data.image.size() < 550000
+        && request.resource.data.image.matches("^data:image/jpeg;base64,[A-Za-z0-9+/=]+$")
+        && request.resource.data.updatedAt is string
+        && request.resource.data.updatedAt.size() < 40;
+      allow delete: if isAllowed() && request.auth.uid == userId;
+    }
+
     match /members/{uid} {
       allow get: if isOwner() || (signedIn() && request.auth.uid == uid);
       allow list: if isOwner();
