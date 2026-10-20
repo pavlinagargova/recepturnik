@@ -1653,7 +1653,7 @@
     } catch (error) {
       toast("Копието е без някои снимки.");
     }
-    downloadBackup("recepturnik-backup.json", { photos: photos });
+    downloadBackup("recepturnik.json", { photos: photos });
     toast("Копието е свалено");
   }
 
