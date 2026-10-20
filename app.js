@@ -940,7 +940,6 @@
     });
 
     const paste = el("details", { class: "paste" });
-    if (!existing) paste.open = true;
     paste.append(
       el("summary", {}, "Имам текст от сайт"),
       el("p", { class: "help" }, "Копирай рецептата от страницата и я постави тук. Връзката сложи отделно, за да можеш да се върнеш към оригинала."),
@@ -953,7 +952,6 @@
     );
 
     const readPhoto = el("details", { class: "paste", id: "read-photo" });
-    if (!existing) readPhoto.open = true;
     readPhoto.append(
       el("summary", {}, "Прочети рецепта от снимка"),
       el("p", { class: "help" }, "Снимка, на която се чете текстът. Тя не сменя снимката на ястието."),
@@ -982,7 +980,6 @@
           el("span", {}, "Име"),
           el("input", { id: "field-title", name: "title", maxlength: "120", required: true, value: existing ? existing.title : "", placeholder: "напр. Таратор" }),
         ]),
-        readPhoto,
         el("div", { class: "photo-field", id: "photo-field", tabindex: "0" }, [
           el("span", { class: "block-title" }, "Снимка на ястието"),
           el("img", { id: "photo-preview", alt: "", hidden: true }),
@@ -995,6 +992,7 @@
             el("button", { type: "button", class: "btn btn-ghost", id: "photo-paste" }, "Постави снимка"),
             el("button", { type: "button", class: "btn btn-ghost", id: "photo-clear", hidden: true }, "Махни снимката"),
           ]),
+          readPhoto,
         ]),
         el("div", { class: "meta-grid" }, [
           el("div", { class: "with-button" }, [
