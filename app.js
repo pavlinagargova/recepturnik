@@ -390,7 +390,7 @@
       if (state.categoryId === "none") return !effectiveCategory(recipe);
       if (state.categoryId !== "all") return effectiveCategory(recipe) === state.categoryId;
       return true;
-    }).sort(function (a, b) { return b.updatedAt.localeCompare(a.updatedAt); });
+    }).sort(function (a, b) { return b.createdAt.localeCompare(a.createdAt); });
   }
 
   function syncTitle() {
@@ -460,31 +460,32 @@
     return row;
   }
 
-function renderSidebar() {
-  const aside = document.querySelector("#sidebar");
-  const filters = el("div", { class: "nav-scroll" });
-  const searched = db.recipes.filter(matchesQuery);
-  filters.append(
-    filterRow("all", "Всички", searched.length),
-    filterRow("favorites", "Любими", searched.filter(function (recipe) { return recipe.favorite; }).length)
-  );
-  if (db.recipes.some(function (recipe) { return !effectiveCategory(recipe); })) {
-    filters.append(filterRow("none", "Без категория", searched.filter(function (recipe) { return !effectiveCategory(recipe); }).length));
-  }
+  function renderSidebar() {
+    const aside = document.querySelector("#sidebar");
+    const searched = db.recipes.filter(matchesQuery);
+    const filters = el("div", { class: "cat-list cat-filters" });
+    filters.append(
+      filterRow("all", "Всички", searched.length),
+      filterRow("favorites", "Любими", searched.filter(function (recipe) { return recipe.favorite; }).length)
+    );
+    if (db.recipes.some(function (recipe) { return !effectiveCategory(recipe); })) {
+      filters.append(filterRow("none", "Без категория", searched.filter(function (recipe) { return !effectiveCategory(recipe); }).length));
+    }
 
-  db.categories.forEach(function (category) {
+    const categories = el("div", { class: "cat-list" });
+    db.categories.forEach(function (category) {
       const count = searched.filter(function (recipe) { return effectiveCategory(recipe) === category.id; }).length;
       const row = el("div", { class: state.categoryId === category.id ? "cat-row is-active" : "cat-row" });
+      const swatch = el("span", { class: "cat-swatch", "aria-hidden": "true" });
+      swatch.style.background = category.color;
       const button = el("button", {
         type: "button",
         class: "cat",
         onclick: function () { setCategory(category.id); },
       }, [
-        el("span", { class: "dot" }),
         el("span", { class: "name" }, category.name),
         el("span", { class: "num" }, String(count)),
       ]);
-      button.querySelector(".dot").style.background = category.color;
       if (state.categoryId === category.id) button.setAttribute("aria-current", "true");
       const edit = el("button", {
         type: "button",
@@ -492,20 +493,25 @@ function renderSidebar() {
         "aria-label": "Промени " + category.name,
         onclick: function () { openCategoryDialog(category); },
       }, "✎");
-      row.append(button, edit);
-      filters.append(row);
+      row.append(swatch, button, edit);
+      categories.append(row);
     });
+
+    const scroll = el("div", { class: "cat-scroll" }, [
+      filters,
+      el("p", { class: "cat-group-label" }, "По вид"),
+      categories,
+    ]);
 
     aside.replaceChildren(
       el("p", { class: "side-label" }, "Категории"),
-      filters,
+      scroll,
       el("button", {
         type: "button",
         class: "btn btn-ghost",
         id: "add-category",
         onclick: function () { openCategoryDialog(null); },
-      }, "Нова категория"),
-      el("p", { class: "side-hint" }, "Рецептите са в акаунта ти. Същите те чакат и на телефона, и на компютъра.")
+      }, "Нова категория")
     );
   }
 
@@ -576,8 +582,7 @@ function renderSidebar() {
       ]);
     }
 
-    const grid = el("div", { class: "grid" });
-    recipes.forEach(function (recipe) {
+    function recipeCard(recipe) {
       const category = categoryOf(effectiveCategory(recipe));
       const card = el("article", { class: "card" });
       card.dataset.id = recipe.id;
@@ -594,10 +599,40 @@ function renderSidebar() {
         el("p", { class: "preview" }, previewText(recipe)),
       ]);
       card.append(open, starButton(recipe));
-      grid.append(card);
-    });
+      return card;
+    }
 
-    return el("section", {}, [head, grid]);
+    function cardGrid(items) {
+      const grid = el("div", { class: "grid" });
+      items.forEach(function (recipe) { grid.append(recipeCard(recipe)); });
+      return grid;
+    }
+
+    const grouped = state.categoryId === "all" || state.categoryId === "favorites";
+    if (!grouped) return el("section", {}, [head, cardGrid(recipes)]);
+
+    const groups = [];
+    db.categories.forEach(function (category) {
+      const items = recipes.filter(function (recipe) { return effectiveCategory(recipe) === category.id; });
+      if (items.length) groups.push({ name: category.name, color: category.color, items: items });
+    });
+    const loose = recipes.filter(function (recipe) { return !effectiveCategory(recipe); });
+    if (loose.length) groups.push({ name: "Без категория", color: "#d6d3d1", items: loose });
+
+    const wrap = el("div", { class: "cat-groups" });
+    groups.forEach(function (group) {
+      const bar = el("span", { class: "cat-section-bar", "aria-hidden": "true" });
+      bar.style.background = group.color;
+      wrap.append(el("section", { class: "cat-section" }, [
+        el("div", { class: "cat-section-head" }, [
+          bar,
+          el("h3", {}, group.name),
+          el("span", { class: "num" }, String(group.items.length)),
+        ]),
+        cardGrid(group.items),
+      ]));
+    });
+    return el("section", {}, [head, wrap]);
   }
 
   function starButton(recipe) {
