@@ -128,7 +128,7 @@
     const value = String(raw || "").toLowerCase().replace(/[\s.]+/g, "");
     if (!value) return "";
     if (value === "кг" || value === "kg") return "кг";
-    if (value === "г" || value === "гр" || value === "g") return "г";
+    if (value === "г" || value === "гр" || value === "g" || value === "gr") return "гр";
     if (value === "мл" || value === "ml") return "мл";
     if (value === "л" || value.indexOf("лит") === 0) return "л";
     if (value.indexOf("щип") === 0) return "щипка";

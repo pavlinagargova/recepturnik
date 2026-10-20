@@ -1,7 +1,7 @@
 (function () {
   const STORAGE_KEY = "recepturnik.v1";
   const COLORS = ["#8a3b1e", "#c47a3a", "#2f4a36", "#3d6b58", "#3d5a73", "#7a3e55", "#6a4632", "#8a6a2f", "#6d6256"];
-  const UNITS = ["г", "кг", "мл", "л", "ч.л.", "с.л.", "бр.", "щипка", "чаша", "връзка", "скилидка", "глава", "по вкус"];
+  const UNITS = ["гр", "кг", "мл", "л", "ч.л.", "с.л.", "бр.", "щипка", "чаша", "връзка", "скилидка", "глава", "по вкус"];
   const photoCache = {};
   const DEFAULT_NAMES = ["Закуски", "Супи", "Салати", "Основни", "Тестени", "Десерти", "Хляб", "Напитки", "Други"];
 
@@ -66,7 +66,8 @@
     if (!parsed || typeof parsed !== "object") return null;
     const name = cleanString(parsed.name, 160);
     const amount = cleanString(parsed.amount, 20);
-    const unit = UNITS.indexOf(parsed.unit) >= 0 ? parsed.unit : "";
+    const rawUnit = parsed.unit === "г" || parsed.unit === "g" ? "гр" : parsed.unit;
+    const unit = UNITS.indexOf(rawUnit) >= 0 ? rawUnit : "";
     if (!name && !amount) return null;
     return { name: name, amount: amount, unit: unit };
   }
@@ -679,19 +680,23 @@ function renderSidebar() {
         el("button", { type: "button", class: "btn btn-danger", onclick: function () { deleteRecipe(recipe); } }, "Изтрий"),
       ]),
       el("div", { class: "recipe-columns" }, [
-        recipe.ingredients.length ? el("section", { class: "ingredients" }, [
-          el("h3", { class: "block-title" }, "Съставки"),
-          ingredients,
-        ]) : el("section", { class: "ingredients" }, [
-          el("h3", { class: "block-title" }, "Съставки"),
-          el("p", { class: "quiet" }, "Няма записани съставки."),
+        el("div", { class: "recipe-side" }, [
+          recipe.ingredients.length ? el("section", { class: "ingredients" }, [
+            el("h3", { class: "block-title" }, "Съставки"),
+            ingredients,
+          ]) : el("section", { class: "ingredients" }, [
+            el("h3", { class: "block-title" }, "Съставки"),
+            el("p", { class: "quiet" }, "Няма записани съставки."),
+          ]),
         ]),
-        recipe.steps.length ? el("section", {}, [
-          el("h3", { class: "block-title" }, "Начин на приготвяне"),
-          steps,
-        ]) : el("section", {}, [
-          el("h3", { class: "block-title" }, "Начин на приготвяне"),
-          el("p", { class: "quiet" }, "Няма записани стъпки."),
+        el("div", { class: "recipe-side" }, [
+          recipe.steps.length ? el("section", {}, [
+            el("h3", { class: "block-title" }, "Начин на приготвяне"),
+            steps,
+          ]) : el("section", {}, [
+            el("h3", { class: "block-title" }, "Начин на приготвяне"),
+            el("p", { class: "quiet" }, "Няма записани стъпки."),
+          ]),
         ]),
       ]),
       recipe.notes ? el("section", { class: "notes" }, [
@@ -767,7 +772,7 @@ function renderSidebar() {
     function add(value, afterRow, focus) {
       const row = el("div", { class: options.multiline ? "line-row step-row" : "line-row" });
       const field = options.multiline
-        ? el("textarea", { rows: "2", maxlength: "2000", placeholder: options.placeholder, "aria-label": options.label }, value || "")
+        ? el("textarea", { rows: "5", maxlength: "2000", placeholder: options.placeholder, "aria-label": options.label }, value || "")
         : el("input", { type: "text", value: value || "", maxlength: "300", placeholder: options.placeholder, "aria-label": options.label });
       const remove = el("button", { type: "button", class: "icon-btn", "aria-label": options.removeLabel }, "×");
       remove.addEventListener("click", function () {
@@ -889,6 +894,7 @@ function renderSidebar() {
     const pasteStatus = el("p", { class: "parse-status", id: "parse-status", role: "status" });
     const pasteArea = el("textarea", {
       id: "paste-text",
+      rows: "8",
       placeholder: "Постави тук копирания текст от страницата",
     });
 
@@ -917,14 +923,16 @@ function renderSidebar() {
           el("span", {}, "Име"),
           el("input", { id: "field-title", name: "title", maxlength: "120", required: true, value: existing ? existing.title : "", placeholder: "напр. Таратор" }),
         ]),
-        el("div", { class: "photo-field" }, [
+        el("div", { class: "photo-field", id: "photo-field", tabindex: "0" }, [
           el("span", { class: "block-title" }, "Снимка"),
           el("img", { id: "photo-preview", alt: "", hidden: true }),
+          el("p", { class: "help" }, "Избери файл или копирай снимка и я постави с Cmd+V."),
           el("div", { class: "photo-actions" }, [
             el("label", { class: "btn btn-ghost" }, [
               "Избери снимка",
               el("input", { id: "photo-input", type: "file", accept: "image/*", hidden: true }),
             ]),
+            el("button", { type: "button", class: "btn btn-ghost", id: "photo-paste" }, "Постави снимка"),
             el("button", { type: "button", class: "btn btn-ghost", id: "photo-clear", hidden: true }, "Махни снимката"),
           ]),
         ]),
@@ -950,24 +958,26 @@ function renderSidebar() {
           el("input", { id: "field-source", name: "source", maxlength: "500", inputmode: "url", value: existing ? existing.sourceUrl : "", placeholder: "https://" }),
         ]),
         paste,
-        el("section", {}, [
-          el("h3", { class: "block-title" }, "Съставки"),
-          el("div", { class: "ingredient-head" }, [
-            el("span", {}, "Име"),
-            el("span", {}, "Количество"),
-            el("span", {}, "Мерна единица"),
+        el("div", { class: "recipe-columns editor-split" }, [
+          el("section", {}, [
+            el("h3", { class: "block-title" }, "Съставки"),
+            el("div", { class: "ingredient-head" }, [
+              el("span", {}, "Име"),
+              el("span", {}, "Количество"),
+              el("span", {}, "Мерна единица"),
+            ]),
+            ingredientList,
+            el("button", { type: "button", class: "btn btn-ghost", onclick: function () { ingredients.add(null, null, true); } }, "Добави съставка"),
           ]),
-          ingredientList,
-          el("button", { type: "button", class: "btn btn-ghost", onclick: function () { ingredients.add(null, null, true); } }, "Добави съставка"),
-        ]),
-        el("section", {}, [
-          el("h3", { class: "block-title" }, "Начин на приготвяне"),
-          stepList,
-          el("button", { type: "button", class: "btn btn-ghost", onclick: function () { steps.add("", null, true); } }, "Добави стъпка"),
+          el("section", {}, [
+            el("h3", { class: "block-title" }, "Начин на приготвяне"),
+            stepList,
+            el("button", { type: "button", class: "btn btn-ghost", onclick: function () { steps.add("", null, true); } }, "Добави стъпка"),
+          ]),
         ]),
         el("label", { class: "field" }, [
           el("span", {}, "Бележки"),
-          el("textarea", { id: "field-notes", name: "notes", maxlength: "5000", placeholder: "Нещо, което искаш да помниш следващия път" }, existing ? existing.notes : ""),
+          el("textarea", { id: "field-notes", name: "notes", rows: "6", maxlength: "5000", placeholder: "Нещо, което искаш да помниш следващия път" }, existing ? existing.notes : ""),
         ]),
       ]),
       el("div", { class: "editor-actions" }, [
@@ -980,17 +990,75 @@ function renderSidebar() {
       event.preventDefault();
       saveEditor(existing);
     });
-    form.querySelector("#photo-input").addEventListener("change", function (event) {
-      const file = event.target.files && event.target.files[0];
-      event.target.value = "";
+    function applyPhotoFile(file) {
       if (!file) return;
+      form.dataset.photoTouched = "1";
+      const save = form.querySelector("#editor-save");
+      if (save) save.disabled = true;
       compressImage(file).then(function (src) {
         const preview = form.querySelector("#photo-preview");
         preview.setAttribute("src", src);
         preview.hidden = false;
         form.querySelector("#photo-clear").hidden = false;
+        form.dataset.photoReady = "1";
+        if (save) save.disabled = false;
       }).catch(function (error) {
+        delete form.dataset.photoTouched;
+        if (form.dataset.photoReady !== "0") {
+          form.dataset.photoReady = "1";
+          if (save) save.disabled = false;
+        }
         toast(error && error.message === "big" ? "Снимката е твърде голяма." : "Тази снимка не се чете. Пробвай с JPG или PNG.");
+      });
+    }
+
+    function imageFileFromClipboard(data) {
+      if (!data) return null;
+      const files = data.files;
+      if (files) {
+        for (let i = 0; i < files.length; i += 1) {
+          if (files[i] && /^image\//.test(files[i].type)) return files[i];
+        }
+      }
+      const items = data.items;
+      if (!items) return null;
+      for (let i = 0; i < items.length; i += 1) {
+        if (items[i].kind === "file" && /^image\//.test(items[i].type)) return items[i].getAsFile();
+      }
+      return null;
+    }
+
+    form.querySelector("#photo-input").addEventListener("change", function (event) {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = "";
+      if (file) applyPhotoFile(file);
+    });
+    form.querySelector("#photo-paste").addEventListener("click", function () {
+      if (!navigator.clipboard || !navigator.clipboard.read) {
+        toast("Копирай снимката и натисни Cmd+V.");
+        return;
+      }
+      navigator.clipboard.read().then(function (items) {
+        let pending = null;
+        items.forEach(function (item) {
+          if (pending) return;
+          const types = item.types || [];
+          types.forEach(function (type) {
+            if (pending || type.indexOf("image/") !== 0) return;
+            pending = item.getType(type).then(function (blob) {
+              return new File([blob], "clipboard", { type: blob.type || type });
+            });
+          });
+        });
+        if (!pending) {
+          toast("В клипборда няма снимка.");
+          return null;
+        }
+        return pending;
+      }).then(function (file) {
+        if (file) applyPhotoFile(file);
+      }).catch(function () {
+        toast("Копирай снимката и натисни Cmd+V.");
       });
     });
     form.querySelector("#photo-clear").addEventListener("click", function () {
@@ -1084,6 +1152,24 @@ function renderSidebar() {
         if (parsed.steps.length) steps.refill(parsed.steps);
       }
     }
+
+    function onPastePhoto(event) {
+      if (!form.isConnected) {
+        document.removeEventListener("paste", onPastePhoto);
+        return;
+      }
+      const file = imageFileFromClipboard(event.clipboardData);
+      if (!file) return;
+      const target = event.target;
+      if (target && target.closest) {
+        const field = target.closest("input, textarea");
+        if (field && !form.contains(field)) return;
+        if (field && form.contains(field) && event.clipboardData.getData("text/plain")) return;
+      }
+      event.preventDefault();
+      applyPhotoFile(file);
+    }
+    document.addEventListener("paste", onPastePhoto);
 
     return form;
   }
@@ -1205,7 +1291,7 @@ function renderSidebar() {
       ready.then(function (src) {
         const current = document.querySelector("#editor-form");
         if (!current || current !== editor) return;
-        if (src) {
+        if (src && editor.dataset.photoTouched !== "1") {
           const preview = document.querySelector("#photo-preview");
           if (preview) {
             preview.setAttribute("src", src);
