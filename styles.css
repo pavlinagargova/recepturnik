@@ -514,9 +514,9 @@ body[data-view="edit"] #sidebar { display: none; }
 
 .card {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) auto;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
   align-items: stretch;
-  min-height: 132px;
+  min-height: 96px;
   background: white;
   border-radius: 22px;
   overflow: hidden;
@@ -768,9 +768,10 @@ body[data-view="edit"] #sidebar { display: none; }
 .photo-field:focus { outline: none; }
 .photo-field:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .photo-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-#photo-preview {
-  width: 100%;
-  max-height: 320px;
+#photo-preview,
+#read-preview {
+  width: min(100%, 280px);
+  max-height: 180px;
   object-fit: cover;
   border-radius: 12px;
   background: #f5f2ee;
@@ -778,7 +779,7 @@ body[data-view="edit"] #sidebar { display: none; }
 
 .card-photo {
   height: 100%;
-  min-height: 132px;
+  min-height: 96px;
   background: #f5f5f4;
   overflow: hidden;
 }
@@ -786,17 +787,17 @@ body[data-view="edit"] #sidebar { display: none; }
 .card-photo img {
   width: 100%;
   height: 100%;
-  min-height: 132px;
+  min-height: 96px;
   object-fit: cover;
   display: block;
 }
 
 .recipe-photo { margin: 0 0 18px; }
 .recipe-photo img {
-  width: 100%;
-  height: 380px;
+  width: min(100%, 280px);
+  height: 180px;
   object-fit: cover;
-  border-radius: 24px;
+  border-radius: 18px;
   display: block;
 }
 
@@ -971,13 +972,13 @@ fieldset.colors legend { padding: 0; }
   .cat-list { display: grid; grid-template-columns: 1fr 1fr; }
   .list-head h2, .sheet-title, .editor h2 { font-size: 32px; }
   .card, .card:has(.card-photo), .card:not(:has(.card-photo)) {
-    grid-template-columns: 96px minmax(0, 1fr) auto;
+    grid-template-columns: 72px minmax(0, 1fr) auto;
   }
-  .card-photo, .card-photo img { min-height: 104px; }
+  .card-photo, .card-photo img { min-height: 84px; }
   .card h3 { font-size: 18px; }
   .recipe-columns, .meta-grid, .editor-split { grid-template-columns: 1fr; }
   .ingredients { position: static; }
-  .recipe-photo img { height: 220px; }
+  .recipe-photo img { width: min(100%, 200px); height: 132px; }
   .ingredient-head { display: none; }
   .ingredient-row,
   .editor-split .ingredient-row { grid-template-columns: minmax(0, 1fr) 108px 36px; }

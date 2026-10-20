@@ -946,6 +946,24 @@
       pasteStatus
     );
 
+    const readPhoto = el("details", { class: "paste", id: "read-photo" });
+    if (!existing) readPhoto.open = true;
+    readPhoto.append(
+      el("summary", {}, "Прочети рецепта от снимка"),
+      el("p", { class: "help" }, "Снимка, на която се чете текстът. Тя не сменя снимката на ястието."),
+      el("img", { id: "read-preview", alt: "", hidden: true }),
+      el("div", { class: "photo-actions" }, [
+        el("label", { class: "btn btn-ghost" }, [
+          "Избери снимка",
+          el("input", { id: "read-input", type: "file", accept: "image/*", hidden: true }),
+        ]),
+        el("button", { type: "button", class: "btn btn-ghost", id: "read-paste" }, "Постави снимка"),
+        el("button", { type: "button", class: "btn btn-primary", id: "photo-fill" }, "Попълни полетата"),
+        el("button", { type: "button", class: "btn btn-ghost", id: "photo-fill-dish", hidden: true }, "Прочети снимката на ястието"),
+      ]),
+      el("p", { class: "parse-status", id: "photo-status", role: "status" })
+    );
+
     form.append(
       el("button", {
         type: "button",
@@ -959,19 +977,17 @@
           el("input", { id: "field-title", name: "title", maxlength: "120", required: true, value: existing ? existing.title : "", placeholder: "напр. Таратор" }),
         ]),
         el("div", { class: "photo-field", id: "photo-field", tabindex: "0" }, [
-          el("span", { class: "block-title" }, "Снимка"),
+          el("span", { class: "block-title" }, "Снимка на ястието"),
           el("img", { id: "photo-preview", alt: "", hidden: true }),
-          el("p", { class: "help" }, "Избери файл, постави снимка с Cmd+V, или попълни полетата от нея."),
+          el("p", { class: "help" }, "Тази снимка се вижда в списъка и в рецептата."),
           el("div", { class: "photo-actions" }, [
             el("label", { class: "btn btn-ghost" }, [
               "Избери снимка",
               el("input", { id: "photo-input", type: "file", accept: "image/*", hidden: true }),
             ]),
             el("button", { type: "button", class: "btn btn-ghost", id: "photo-paste" }, "Постави снимка"),
-            el("button", { type: "button", class: "btn btn-primary", id: "photo-fill" }, "Попълни от снимката"),
             el("button", { type: "button", class: "btn btn-ghost", id: "photo-clear", hidden: true }, "Махни снимката"),
           ]),
-          el("p", { class: "parse-status", id: "photo-status", role: "status" }),
         ]),
         el("div", { class: "meta-grid" }, [
           el("div", { class: "with-button" }, [
@@ -995,6 +1011,7 @@
           el("input", { id: "field-source", name: "source", maxlength: "500", inputmode: "url", value: existing ? existing.sourceUrl : "", placeholder: "https://" }),
         ]),
         paste,
+        readPhoto,
         el("div", { class: "recipe-columns editor-split" }, [
           el("section", {}, [
             el("h3", { class: "block-title" }, "Съставки"),
@@ -1027,6 +1044,17 @@
       event.preventDefault();
       saveEditor(existing);
     });
+    function dishPhotoSrc() {
+      const preview = form.querySelector("#photo-preview");
+      if (!preview || preview.hidden) return "";
+      return preview.getAttribute("src") || "";
+    }
+
+    function syncDishRead() {
+      const button = form.querySelector("#photo-fill-dish");
+      if (button) button.hidden = dishPhotoSrc().indexOf("data:image/jpeg;base64,") !== 0;
+    }
+
     function applyPhotoFile(file) {
       if (!file) return;
       form.dataset.photoTouched = "1";
@@ -1038,6 +1066,7 @@
         preview.hidden = false;
         form.querySelector("#photo-clear").hidden = false;
         form.dataset.photoReady = "1";
+        syncDishRead();
         if (save) save.disabled = false;
       }).catch(function (error) {
         delete form.dataset.photoTouched;
@@ -1046,6 +1075,21 @@
           if (save) save.disabled = false;
         }
         toast(error && error.message === "big" ? "Снимката е твърде голяма." : "Тази снимка не се чете. Пробвай с JPG или PNG.");
+      });
+    }
+
+    function applyReadFile(file) {
+      if (!file) return;
+      const read = form.querySelector("#read-photo");
+      if (read) read.open = true;
+      photoStatus("Снимката се подготвя...");
+      compressImage(file).then(function (src) {
+        const preview = form.querySelector("#read-preview");
+        preview.setAttribute("src", src);
+        preview.hidden = false;
+        photoStatus("Снимката е готова. Натисни Попълни полетата.");
+      }).catch(function (error) {
+        photoStatus(error && error.message === "big" ? "Снимката е твърде голяма." : "Тази снимка не се чете. Пробвай с JPG или PNG.");
       });
     }
 
@@ -1070,12 +1114,9 @@
       event.target.value = "";
       if (file) applyPhotoFile(file);
     });
-    form.querySelector("#photo-paste").addEventListener("click", function () {
-      if (!navigator.clipboard || !navigator.clipboard.read) {
-        toast("Копирай снимката и натисни Cmd+V.");
-        return;
-      }
-      navigator.clipboard.read().then(function (items) {
+    function clipboardFile() {
+      if (!navigator.clipboard || !navigator.clipboard.read) return Promise.reject(new Error("clipboard"));
+      return navigator.clipboard.read().then(function (items) {
         let pending = null;
         items.forEach(function (item) {
           if (pending) return;
@@ -1087,15 +1128,29 @@
             });
           });
         });
-        if (!pending) {
-          toast("В клипборда няма снимка.");
-          return null;
-        }
-        return pending;
-      }).then(function (file) {
+        return pending || null;
+      });
+    }
+
+    form.querySelector("#photo-paste").addEventListener("click", function () {
+      clipboardFile().then(function (file) {
         if (file) applyPhotoFile(file);
+        else toast("В клипборда няма снимка.");
       }).catch(function () {
-        toast("Копирай снимката и натисни Cmd+V.");
+        toast("Копирай снимката и натисни Cmd+V върху снимката на ястието.");
+      });
+    });
+    form.querySelector("#read-input").addEventListener("change", function (event) {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = "";
+      if (file) applyReadFile(file);
+    });
+    form.querySelector("#read-paste").addEventListener("click", function () {
+      clipboardFile().then(function (file) {
+        if (file) applyReadFile(file);
+        else photoStatus("В клипборда няма снимка.");
+      }).catch(function () {
+        photoStatus("Копирай снимката и натисни Cmd+V в тази част.");
       });
     });
     form.querySelector("#photo-clear").addEventListener("click", function () {
@@ -1103,6 +1158,7 @@
       preview.removeAttribute("src");
       preview.hidden = true;
       form.querySelector("#photo-clear").hidden = true;
+      syncDishRead();
     });
     form.addEventListener("keydown", function (event) {
       if (event.key !== "Enter" || event.target.tagName !== "INPUT") return;
@@ -1175,21 +1231,39 @@
       setStatus(parts.length ? "Намерих " + parts.join(" и ") + ". Прегледай ги преди да запазиш." : "Попълних каквото успях да отделя. Прегледай полетата.");
     }
 
+    function categoryIdByName(name) {
+      const wanted = String(name || "").trim().toLowerCase();
+      if (!wanted) return "";
+      const match = db.categories.find(function (category) { return category.name.toLowerCase() === wanted; });
+      return match ? match.id : "";
+    }
+
     function applyParsed(parsed, replaceLists) {
       const title = document.querySelector("#field-title");
       const source = document.querySelector("#field-source");
       const time = document.querySelector("#field-time");
       const servings = document.querySelector("#field-servings");
       const notes = document.querySelector("#field-notes");
+      const category = document.querySelector("#field-category");
+      let categoryName = "";
       if (!title.value.trim() && parsed.title) title.value = parsed.title;
       if (!source.value.trim() && parsed.sourceUrl) source.value = parsed.sourceUrl;
       if (!time.value.trim() && parsed.time) time.value = parsed.time;
       if (!servings.value.trim() && parsed.servings) servings.value = parsed.servings;
       if (notes && !notes.value.trim() && parsed.notes) notes.value = parsed.notes;
+      if (category && !category.value && parsed.category) {
+        const id = categoryIdByName(parsed.category);
+        const chosen = id ? categoryOf(id) : null;
+        if (chosen) {
+          category.value = chosen.id;
+          categoryName = chosen.name;
+        }
+      }
       if (replaceLists) {
         if (parsed.ingredients.length) ingredients.refill(parsed.ingredients);
         if (parsed.steps.length) steps.refill(parsed.steps);
       }
+      return categoryName;
     }
 
     function photoStatus(message) {
@@ -1197,20 +1271,24 @@
       if (node) node.textContent = message;
     }
 
-    async function fillFromPhoto() {
+    function withCategory(message, categoryName) {
+      return categoryName ? message + " Категория: " + categoryName + "." : message;
+    }
+
+    async function fillFromPhoto(src) {
       const endpoint = String(window.RECEPTURNIK_VISION_URL || "").trim();
       const button = form.querySelector("#photo-fill");
+      const dishButton = form.querySelector("#photo-fill-dish");
       if (!endpoint) {
         photoStatus("Попълването от снимка още не е включено.");
         return;
       }
-      const preview = form.querySelector("#photo-preview");
-      const src = preview && !preview.hidden ? preview.getAttribute("src") || "" : "";
-      if (src.indexOf("data:image/jpeg;base64,") !== 0) {
+      if (String(src || "").indexOf("data:image/jpeg;base64,") !== 0) {
         photoStatus("Първо сложи снимка, на която се чете рецептата.");
         return;
       }
       if (button) button.disabled = true;
+      if (dishButton) dishButton.disabled = true;
       photoStatus("Чета снимката...");
       try {
         const user = firebase.auth().currentUser;
@@ -1224,7 +1302,10 @@
             "Content-Type": "application/json",
             Authorization: "Bearer " + await user.getIdToken(),
           },
-          body: JSON.stringify({ image: src }),
+          body: JSON.stringify({
+            image: src,
+            categories: db.categories.map(function (category) { return category.name; }),
+          }),
         });
         const body = await response.json().catch(function () { return {}; });
         if (!response.ok) {
@@ -1233,13 +1314,14 @@
         }
         const parsed = {
           title: body.title || "",
+          category: body.category || "",
           ingredients: Array.isArray(body.ingredients) ? body.ingredients : [],
           steps: Array.isArray(body.steps) ? body.steps : [],
           time: body.time || "",
           servings: body.servings || "",
           notes: body.notes || "",
         };
-        if (!parsed.title && !parsed.ingredients.length && !parsed.steps.length && !parsed.time && !parsed.servings) {
+        if (!parsed.title && !parsed.ingredients.length && !parsed.steps.length && !parsed.time && !parsed.servings && !parsed.category) {
           photoStatus("В снимката не видях рецепта. Сложи снимка, на която се чете текстът.");
           return;
         }
@@ -1253,23 +1335,31 @@
             confirmLabel: "Замени",
           });
           if (!ok) {
-            applyParsed(parsed, false);
-            photoStatus("Попълних само празните полета. Прегледай ги преди да запазиш.");
+            const categoryName = applyParsed(parsed, false);
+            photoStatus(withCategory("Попълних само празните полета. Прегледай ги преди да запазиш.", categoryName));
             return;
           }
         }
-        applyParsed(parsed, true);
+        const categoryName = applyParsed(parsed, true);
         const parts = [];
         if (parsed.ingredients.length) parts.push(parsed.ingredients.length + " " + countWord(parsed.ingredients.length, "съставка", "съставки"));
         if (parsed.steps.length) parts.push(parsed.steps.length + " " + countWord(parsed.steps.length, "стъпка", "стъпки"));
-        photoStatus(parts.length ? "Намерих " + parts.join(" и ") + ". Прегледай ги преди да запазиш." : "Попълних каквото се четеше. Прегледай полетата преди да запазиш.");
+        photoStatus(withCategory(parts.length ? "Намерих " + parts.join(" и ") + ". Прегледай ги преди да запазиш." : "Попълних каквото се четеше. Прегледай полетата преди да запазиш.", categoryName));
       } catch (error) {
         photoStatus("Не успях да стигна до модела. Опитай пак.");
       } finally {
         if (button) button.disabled = false;
+        if (dishButton) dishButton.disabled = false;
       }
     }
-    form.querySelector("#photo-fill").addEventListener("click", fillFromPhoto);
+    form.querySelector("#photo-fill").addEventListener("click", function () {
+      const preview = form.querySelector("#read-preview");
+      const src = preview && !preview.hidden ? preview.getAttribute("src") || "" : "";
+      fillFromPhoto(src);
+    });
+    form.querySelector("#photo-fill-dish").addEventListener("click", function () {
+      fillFromPhoto(dishPhotoSrc());
+    });
 
     function onPastePhoto(event) {
       if (!form.isConnected) {
@@ -1284,8 +1374,11 @@
         if (field && !form.contains(field)) return;
         if (field && form.contains(field) && event.clipboardData.getData("text/plain")) return;
       }
+      const inRead = target && target.closest && target.closest("#read-photo");
+      const inDish = target && target.closest && target.closest("#photo-field");
       event.preventDefault();
-      applyPhotoFile(file);
+      if (inRead || (!inDish && dishPhotoSrc())) applyReadFile(file);
+      else applyPhotoFile(file);
     }
     document.addEventListener("paste", onPastePhoto);
 
@@ -1416,6 +1509,8 @@
             preview.hidden = false;
             const clear = document.querySelector("#photo-clear");
             if (clear) clear.hidden = false;
+            const dishRead = document.querySelector("#photo-fill-dish");
+            if (dishRead) dishRead.hidden = false;
           }
         }
         editor.dataset.photoReady = "1";

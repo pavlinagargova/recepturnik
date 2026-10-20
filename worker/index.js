@@ -95,6 +95,7 @@ export function normalizeRecipe(raw) {
   const steps = Array.isArray(data.steps) ? data.steps : [];
   return {
     title: clean(data.title, 120),
+    category: clean(data.category, 40),
     time: clean(data.time, 40),
     servings: clean(data.servings, 40),
     notes: clean(data.notes, 5000),
@@ -139,19 +140,33 @@ async function bump(quota, uid) {
   await quota.put(globalKey, String(globalCount + 1), options);
 }
 
-function geminiPrompt() {
+function categoryList(values) {
+  if (!Array.isArray(values)) return [];
+  const names = [];
+  values.forEach(function (value) {
+    const name = clean(value, 40);
+    if (name && names.indexOf(name) < 0) names.push(name);
+  });
+  return names.slice(0, 40);
+}
+
+function geminiPrompt(categories) {
+  const categoryLine = categories.length
+    ? "category е точно една от тези: " + categories.join(", ") + ". Избери я по ястието, дори да не е написана на снимката. Ако никоя не пасва, остави category празно и не измисляй нова."
+    : "category остави празно.";
   return [
     "По снимката извлечи рецептата, ако текстът се чете.",
     "Пиши на български, със същите думи като на снимката.",
     "Не измисляй съставки, стъпки, време или порции, които не се виждат.",
     "Ако на снимката няма рецепта, върни празни полета и празни списъци.",
+    categoryLine,
     "amount е само количеството, например 200 или 1/2.",
     "unit е една от: гр, кг, мл, л, ч.л., с.л., бр., щипка, чаша, връзка, скилидка, глава, по вкус. Ако няма такава, остави unit празно.",
     "time е кратко, например 45 мин. servings е броят, например 4.",
   ].join(" ");
 }
 
-async function askModel(env, model, base64) {
+async function askModel(env, model, base64, thinking, categories) {
   return fetch(
     "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent",
     {
@@ -164,18 +179,19 @@ async function askModel(env, model, base64) {
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: geminiPrompt() },
+            { text: geminiPrompt(categories) },
             { inline_data: { mime_type: "image/jpeg", data: base64 } },
           ],
         }],
         generationConfig: {
           temperature: 0.1,
-          thinkingConfig: { thinkingLevel: "low" },
+          thinkingConfig: { thinkingLevel: thinking },
           responseMimeType: "application/json",
           responseSchema: {
             type: "OBJECT",
             properties: {
               title: { type: "STRING" },
+              category: { type: "STRING" },
               time: { type: "STRING" },
               servings: { type: "STRING" },
               notes: { type: "STRING" },
@@ -193,7 +209,7 @@ async function askModel(env, model, base64) {
               },
               steps: { type: "ARRAY", items: { type: "STRING" } },
             },
-            required: ["title", "time", "servings", "notes", "ingredients", "steps"],
+            required: ["title", "category", "time", "servings", "notes", "ingredients", "steps"],
           },
         },
       }),
@@ -201,13 +217,19 @@ async function askModel(env, model, base64) {
   );
 }
 
-async function readRecipe(env, base64) {
-  const models = [env.GEMINI_MODEL || "gemini-3.8-flash", "gemini-3.5-flash-lite"];
+async function readRecipe(env, base64, categories) {
+  const names = [env.GEMINI_MODEL || "gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3-flash-preview"];
+  const models = [];
+  names.forEach(function (name) {
+    if (name && models.every(function (item) { return item.name !== name; })) {
+      models.push({ name: name, thinking: "minimal" });
+    }
+  });
   let busy = false;
   for (let i = 0; i < models.length; i += 1) {
     let response;
     try {
-      response = await askModel(env, models[i], base64);
+      response = await askModel(env, models[i].name, base64, models[i].thinking, categories);
     } catch (error) {
       busy = true;
       continue;
@@ -234,7 +256,12 @@ async function readRecipe(env, base64) {
     } catch (error) {
       parsed = {};
     }
-    return normalizeRecipe(parsed);
+    const recipe = normalizeRecipe(parsed);
+    if (categories.length) {
+      const found = categories.find(function (name) { return name.toLowerCase() === recipe.category.toLowerCase(); });
+      recipe.category = found || "";
+    }
+    return recipe;
   }
   const error = new Error(busy ? "busy" : "model");
   error.status = busy ? 503 : 502;
@@ -273,7 +300,7 @@ export default {
     }
 
     try {
-      const recipe = await readRecipe(env, match[1]);
+      const recipe = await readRecipe(env, match[1], categoryList(body && body.categories));
       await bump(env.QUOTA, uid);
       return respond(request, 200, recipe);
     } catch (error) {
