@@ -689,6 +689,16 @@
       steps.append(el("li", {}, step));
     });
 
+    const source = (function () {
+      if (!recipe.sourceUrl) return null;
+      const href = normalizeUrl(recipe.sourceUrl);
+      if (!href) return el("p", { class: "source" }, "Източник: " + recipe.sourceUrl);
+      return el("p", { class: "source" }, [
+        "Оригинал: ",
+        el("a", { href: href, target: "_blank", rel: "noopener noreferrer" }, siteLabel(href)),
+      ]);
+    })();
+
     const article = el("article", { class: "sheet recipe" }, [
       el("button", {
         type: "button",
@@ -697,22 +707,18 @@
       }, "Към рецептите"),
       el("p", { class: "kicker" }, category ? category.name : "Без категория"),
       el("h2", { class: "sheet-title" }, recipe.title),
-      recipe.hasPhoto ? el("div", { class: "recipe-photo", "data-photo": recipe.id }) : null,
-      meta ? el("p", { class: "meta-line" }, meta) : null,
-      (function () {
-        if (!recipe.sourceUrl) return null;
-        const href = normalizeUrl(recipe.sourceUrl);
-        if (!href) return el("p", { class: "source" }, "Източник: " + recipe.sourceUrl);
-        return el("p", { class: "source" }, [
-          "Оригинал: ",
-          el("a", { href: href, target: "_blank", rel: "noopener noreferrer" }, siteLabel(href)),
-        ]);
-      })(),
-      el("div", { class: "recipe-actions" }, [
-        starButton(recipe),
-        el("button", { type: "button", class: "btn btn-primary", onclick: function () { go({ name: "edit", id: recipe.id }); } }, "Редактирай"),
-        el("button", { type: "button", class: "btn btn-ghost", onclick: function () { window.print(); } }, "Печат"),
-        el("button", { type: "button", class: "btn btn-danger", onclick: function () { deleteRecipe(recipe); } }, "Изтрий"),
+      el("div", { class: "recipe-hero" }, [
+        recipe.hasPhoto ? el("div", { class: "recipe-photo", "data-photo": recipe.id }) : null,
+        el("div", { class: "recipe-aside" }, [
+          meta ? el("p", { class: "meta-line" }, meta) : null,
+          source,
+          el("div", { class: "recipe-actions" }, [
+            starButton(recipe),
+            el("button", { type: "button", class: "btn btn-primary", onclick: function () { go({ name: "edit", id: recipe.id }); } }, "Редактирай"),
+            el("button", { type: "button", class: "btn btn-ghost", onclick: function () { window.print(); } }, "Печат"),
+            el("button", { type: "button", class: "btn btn-danger", onclick: function () { deleteRecipe(recipe); } }, "Изтрий"),
+          ]),
+        ]),
       ]),
       el("div", { class: "recipe-columns" }, [
         el("div", { class: "recipe-side" }, [
@@ -976,6 +982,7 @@
           el("span", {}, "Име"),
           el("input", { id: "field-title", name: "title", maxlength: "120", required: true, value: existing ? existing.title : "", placeholder: "напр. Таратор" }),
         ]),
+        readPhoto,
         el("div", { class: "photo-field", id: "photo-field", tabindex: "0" }, [
           el("span", { class: "block-title" }, "Снимка на ястието"),
           el("img", { id: "photo-preview", alt: "", hidden: true }),
@@ -1011,7 +1018,6 @@
           el("input", { id: "field-source", name: "source", maxlength: "500", inputmode: "url", value: existing ? existing.sourceUrl : "", placeholder: "https://" }),
         ]),
         paste,
-        readPhoto,
         el("div", { class: "recipe-columns editor-split" }, [
           el("section", {}, [
             el("h3", { class: "block-title" }, "Съставки"),
