@@ -151,9 +151,8 @@ function geminiPrompt() {
   ].join(" ");
 }
 
-async function readRecipe(env, base64) {
-  const model = env.GEMINI_MODEL || "gemini-3.8-flash";
-  const response = await fetch(
+async function askModel(env, model, base64) {
+  return fetch(
     "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":generateContent",
     {
       method: "POST",
@@ -161,6 +160,7 @@ async function readRecipe(env, base64) {
         "Content-Type": "application/json",
         "x-goog-api-key": env.GEMINI_API_KEY,
       },
+      signal: AbortSignal.timeout(20000),
       body: JSON.stringify({
         contents: [{
           parts: [
@@ -170,6 +170,7 @@ async function readRecipe(env, base64) {
         }],
         generationConfig: {
           temperature: 0.1,
+          thinkingConfig: { thinkingLevel: "low" },
           responseMimeType: "application/json",
           responseSchema: {
             type: "OBJECT",
@@ -198,27 +199,46 @@ async function readRecipe(env, base64) {
       }),
     }
   );
-  if (response.status === 429) {
-    const error = new Error("quota");
-    error.status = 429;
-    throw error;
+}
+
+async function readRecipe(env, base64) {
+  const models = [env.GEMINI_MODEL || "gemini-3.8-flash", "gemini-3.5-flash-lite"];
+  let busy = false;
+  for (let i = 0; i < models.length; i += 1) {
+    let response;
+    try {
+      response = await askModel(env, models[i], base64);
+    } catch (error) {
+      busy = true;
+      continue;
+    }
+    if (response.status === 429) {
+      const error = new Error("quota");
+      error.status = 429;
+      throw error;
+    }
+    if (response.status === 404) continue;
+    if (response.status === 503 || response.status === 500) {
+      busy = true;
+      continue;
+    }
+    if (!response.ok) continue;
+    const payload = await response.json();
+    const parts = payload && payload.candidates && payload.candidates[0] && payload.candidates[0].content && payload.candidates[0].content.parts
+      ? payload.candidates[0].content.parts
+      : [];
+    const text = parts.filter(function (part) { return part && !part.thought; }).map(function (part) { return part.text || ""; }).join("");
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (error) {
+      parsed = {};
+    }
+    return normalizeRecipe(parsed);
   }
-  if (!response.ok) {
-    const error = new Error("model");
-    error.status = 502;
-    throw error;
-  }
-  const payload = await response.json();
-  const text = payload && payload.candidates && payload.candidates[0] && payload.candidates[0].content && payload.candidates[0].content.parts
-    ? payload.candidates[0].content.parts.map(function (part) { return part.text || ""; }).join("")
-    : "";
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch (error) {
-    parsed = {};
-  }
-  return normalizeRecipe(parsed);
+  const error = new Error(busy ? "busy" : "model");
+  error.status = busy ? 503 : 502;
+  throw error;
 }
 
 export default {
@@ -259,6 +279,9 @@ export default {
     } catch (error) {
       if (error && error.status === 429) {
         return respond(request, 429, { error: "Безплатните прочитания за днес свършиха. Опитай утре." });
+      }
+      if (error && error.status === 503) {
+        return respond(request, 503, { error: "Моделът е зает в момента. Опитай пак след минута." });
       }
       return respond(request, 502, { error: "Моделът не отговори. Опитай пак след малко." });
     }
