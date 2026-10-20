@@ -1,0 +1,15 @@
+name = "recepufnik-vision"
+main = "worker/index.js"
+compatibility_date = "2026-10-20"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[vars]
+FIREBASE_PROJECT_ID = "recepturnik-pavlina"
+GEMINI_MODEL = "gemini-3.8-flash"
+
+# Тайната GEMINI_API_KEY се слага с: npx wrangler secret put GEMINI_API_KEY
+
+[[kv_namespaces]]
+binding = "QUOTA"
+id = "57cf3686d5b3408f8252721cc6a18a5c"

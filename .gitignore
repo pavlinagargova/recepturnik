@@ -1,4 +1,6 @@
 .DS_Store
 .idea/
 .firebase/
+.wrangler/
+.dev.vars
 firebase-debug.log

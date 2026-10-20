@@ -961,15 +961,17 @@
         el("div", { class: "photo-field", id: "photo-field", tabindex: "0" }, [
           el("span", { class: "block-title" }, "Снимка"),
           el("img", { id: "photo-preview", alt: "", hidden: true }),
-          el("p", { class: "help" }, "Избери файл или копирай снимка и я постави с Cmd+V."),
+          el("p", { class: "help" }, "Избери файл, постави снимка с Cmd+V, или попълни полетата от нея."),
           el("div", { class: "photo-actions" }, [
             el("label", { class: "btn btn-ghost" }, [
               "Избери снимка",
               el("input", { id: "photo-input", type: "file", accept: "image/*", hidden: true }),
             ]),
             el("button", { type: "button", class: "btn btn-ghost", id: "photo-paste" }, "Постави снимка"),
+            el("button", { type: "button", class: "btn btn-primary", id: "photo-fill" }, "Попълни от снимката"),
             el("button", { type: "button", class: "btn btn-ghost", id: "photo-clear", hidden: true }, "Махни снимката"),
           ]),
+          el("p", { class: "parse-status", id: "photo-status", role: "status" }),
         ]),
         el("div", { class: "meta-grid" }, [
           el("div", { class: "with-button" }, [
@@ -1178,15 +1180,96 @@
       const source = document.querySelector("#field-source");
       const time = document.querySelector("#field-time");
       const servings = document.querySelector("#field-servings");
+      const notes = document.querySelector("#field-notes");
       if (!title.value.trim() && parsed.title) title.value = parsed.title;
       if (!source.value.trim() && parsed.sourceUrl) source.value = parsed.sourceUrl;
       if (!time.value.trim() && parsed.time) time.value = parsed.time;
       if (!servings.value.trim() && parsed.servings) servings.value = parsed.servings;
+      if (notes && !notes.value.trim() && parsed.notes) notes.value = parsed.notes;
       if (replaceLists) {
         if (parsed.ingredients.length) ingredients.refill(parsed.ingredients);
         if (parsed.steps.length) steps.refill(parsed.steps);
       }
     }
+
+    function photoStatus(message) {
+      const node = form.querySelector("#photo-status");
+      if (node) node.textContent = message;
+    }
+
+    async function fillFromPhoto() {
+      const endpoint = String(window.RECEPTURNIK_VISION_URL || "").trim();
+      const button = form.querySelector("#photo-fill");
+      if (!endpoint) {
+        photoStatus("Попълването от снимка още не е включено.");
+        return;
+      }
+      const preview = form.querySelector("#photo-preview");
+      const src = preview && !preview.hidden ? preview.getAttribute("src") || "" : "";
+      if (src.indexOf("data:image/jpeg;base64,") !== 0) {
+        photoStatus("Първо сложи снимка, на която се чете рецептата.");
+        return;
+      }
+      if (button) button.disabled = true;
+      photoStatus("Чета снимката...");
+      try {
+        const user = firebase.auth().currentUser;
+        if (!user) {
+          photoStatus("Влез в книгата и опитай пак.");
+          return;
+        }
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + await user.getIdToken(),
+          },
+          body: JSON.stringify({ image: src }),
+        });
+        const body = await response.json().catch(function () { return {}; });
+        if (!response.ok) {
+          photoStatus(body.error || "Не успях да прочета снимката.");
+          return;
+        }
+        const parsed = {
+          title: body.title || "",
+          ingredients: Array.isArray(body.ingredients) ? body.ingredients : [],
+          steps: Array.isArray(body.steps) ? body.steps : [],
+          time: body.time || "",
+          servings: body.servings || "",
+          notes: body.notes || "",
+        };
+        if (!parsed.title && !parsed.ingredients.length && !parsed.steps.length && !parsed.time && !parsed.servings) {
+          photoStatus("В снимката не видях рецепта. Сложи снимка, на която се чете текстът.");
+          return;
+        }
+        const current = readForm();
+        const hasLists = current && (current.ingredients.length || current.steps.length);
+        const parsedHasLists = parsed.ingredients.length || parsed.steps.length;
+        if (hasLists && parsedHasLists) {
+          const ok = await ask({
+            title: "Замяна на списъците",
+            text: "Има вече попълнени съставки или стъпки. Да се заменят ли с прочетените от снимката?",
+            confirmLabel: "Замени",
+          });
+          if (!ok) {
+            applyParsed(parsed, false);
+            photoStatus("Попълних само празните полета. Прегледай ги преди да запазиш.");
+            return;
+          }
+        }
+        applyParsed(parsed, true);
+        const parts = [];
+        if (parsed.ingredients.length) parts.push(parsed.ingredients.length + " " + countWord(parsed.ingredients.length, "съставка", "съставки"));
+        if (parsed.steps.length) parts.push(parsed.steps.length + " " + countWord(parsed.steps.length, "стъпка", "стъпки"));
+        photoStatus(parts.length ? "Намерих " + parts.join(" и ") + ". Прегледай ги преди да запазиш." : "Попълних каквото се четеше. Прегледай полетата преди да запазиш.");
+      } catch (error) {
+        photoStatus("Не успях да стигна до модела. Опитай пак.");
+      } finally {
+        if (button) button.disabled = false;
+      }
+    }
+    form.querySelector("#photo-fill").addEventListener("click", fillFromPhoto);
 
     function onPastePhoto(event) {
       if (!form.isConnected) {
